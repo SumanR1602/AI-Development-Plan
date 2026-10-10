@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LLM foundations: how language models work</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  --paper:#F3F5F9;--surface:#FFFFFF;--ink:#16213A;--muted:#5A6580;--line:#D9DEE8;
+  --cobalt:#2F5BEA;--cobalt-soft:#E3EAFE;--on-cobalt:#FFFFFF;
+  --good:#1F8A5B;--good-soft:#DDF3E8;--bad:#C2362B;--bad-soft:#FBE4E1;--warn:#9A6400;--warn-soft:#FFF1CC;
+  --t1:#DCE6FF;--t2:#D6F1E4;--t3:#FDE2D2;--t4:#EADFFB;--t5:#FFF0BA;
+  --s1:#2F5BEA;--s2:#1F8A5B;--s3:#8A5CD6;--s4:#D9822B;--s5:#C2362B;
+  --display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0F1626;--surface:#17213A;--ink:#E6EAF3;--muted:#9AA6C0;--line:#2B3756;
+    --cobalt:#8FA8FF;--cobalt-soft:#1E2D5C;--on-cobalt:#0F1626;
+    --good:#5CCB98;--good-soft:#123A2B;--bad:#FF8A7E;--bad-soft:#40201F;--warn:#F2C25B;--warn-soft:#3A2F12;
+    --t1:#26386E;--t2:#1D4A39;--t3:#553326;--t4:#3D2D63;--t5:#4D4317;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0F1626;--surface:#17213A;--ink:#E6EAF3;--muted:#9AA6C0;--line:#2B3756;
+  --cobalt:#8FA8FF;--cobalt-soft:#1E2D5C;--on-cobalt:#0F1626;
+  --good:#5CCB98;--good-soft:#123A2B;--bad:#FF8A7E;--bad-soft:#40201F;--warn:#F2C25B;--warn-soft:#3A2F12;
+  --t1:#26386E;--t2:#1D4A39;--t3:#553326;--t4:#3D2D63;--t5:#4D4317;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-behavior:smooth;scroll-padding-top:calc(env(safe-area-inset-top,0px) + 64px)}
+@media (min-width:1000px){html{scroll-padding-top:24px}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 17px/1.65 var(--body);-webkit-font-smoothing:antialiased}
+a{color:var(--cobalt)}
+code{font-family:var(--mono);font-size:.86em;background:var(--cobalt-soft);padding:1px 6px;border-radius:5px}
+:focus-visible{outline:3px solid var(--cobalt);outline-offset:2px;border-radius:4px}
+
+/* layout */
+.shell{display:block}
+.toc{position:sticky;top:0;z-index:20;background:var(--paper);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px);margin-top:calc(-1 * env(safe-area-inset-top,0px))}
+.toc ol{list-style:none;margin:0;padding:10px 16px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;align-items:center}
+.toc ol::-webkit-scrollbar{display:none}
+.toc a{display:flex;gap:8px;align-items:baseline;white-space:nowrap;text-decoration:none;color:var(--muted);font-size:14px;padding:6px 10px;border-radius:8px}
+.toc a span{font-family:var(--mono);font-size:12px}
+.toc a.active{background:var(--surface);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.toc .brand{display:none}
+.theme-toggle{background:none;border:0;color:var(--muted);font:inherit;font-size:14px;padding:6px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.theme-toggle:hover{color:var(--ink)}
+main{max-width:760px;margin:0 auto;padding:0 20px 80px}
+@media (min-width:1000px){
+  .shell{display:grid;grid-template-columns:250px minmax(0,1fr);max-width:1180px;margin:0 auto}
+  .toc{height:100vh;height:100dvh;border-bottom:0;border-right:1px solid var(--line);margin-top:0;padding:28px 0 0}
+  .toc .brand{display:block;font:700 18px/1.2 var(--display);padding:0 24px 18px}
+  .toc ol{flex-direction:column;align-items:stretch;padding:0 14px;gap:2px}
+  .toc a{padding:8px 12px;font-size:15px}
+  .theme-toggle{font-size:15px;padding:8px 12px;margin-top:12px;text-align:left}
+  main{padding:0 48px 96px;margin:0 auto;width:100%;max-width:856px}
+}
+
+/* hero */
+.hero{padding:56px 0 40px}
+.hero h1{font:800 clamp(38px,7vw,60px)/1.03 var(--display);letter-spacing:-.025em;margin:0 0 18px;max-width:15ch}
+.hero p{font-size:19px;color:var(--muted);max-width:56ch;margin:0 0 28px}
+.stream{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px 22px 18px;min-height:132px}
+.stream .chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:60px}
+.stream .tok{font-size:clamp(17px,3.2vw,25px);padding:6px 10px}
+.stream .meta{display:flex;justify-content:space-between;gap:12px;margin-top:14px;font-size:14px;color:var(--muted)}
+.caret{display:inline-block;width:3px;height:1.4em;background:var(--cobalt);animation:blink 1s steps(1) infinite;align-self:center}
+@keyframes blink{50%{opacity:0}}
+@keyframes pop{from{transform:translateY(6px);opacity:0}to{transform:none;opacity:1}}
+
+/* token chip */
+.tok{font-family:var(--mono);font-size:15px;line-height:1.3;padding:3px 7px;border-radius:7px;color:var(--ink);white-space:pre;display:inline-block}
+.tok.new{animation:pop .28s ease-out}
+.tok .sp{opacity:.45}
+.c0{background:var(--t1)}.c1{background:var(--t2)}.c2{background:var(--t3)}.c3{background:var(--t4)}.c4{background:var(--t5)}
+.tok.prompt{background:transparent;box-shadow:inset 0 0 0 1px var(--line);color:var(--muted)}
+
+/* topics */
+section.topic{padding:64px 0 8px;border-top:1px solid var(--line)}
+.topic-head{display:flex;gap:16px;align-items:baseline;margin-bottom:14px}
+.topic-head .num{font:700 15px var(--mono);color:var(--cobalt);min-width:28px}
+h2{font:800 clamp(27px,4.4vw,36px)/1.1 var(--display);letter-spacing:-.02em;margin:0}
+h3{font:700 21px/1.25 var(--display);margin:40px 0 8px}
+.oneline{font:500 clamp(19px,2.5vw,22px)/1.45 var(--display);margin:6px 0 22px;padding-left:44px}
+@media (max-width:560px){.oneline{padding-left:0}.topic-head{gap:10px}}
+.topic p{max-width:66ch}
+.analogy{border-left:3px solid var(--cobalt);padding:4px 0 4px 18px;margin:20px 0}
+.analogy strong{font-weight:600}
+.remember{background:var(--cobalt-soft);border-radius:12px;padding:16px 20px;margin:28px 0 8px}
+.remember strong{display:block;font:700 16px var(--display);margin-bottom:2px}
+.muted{color:var(--muted);font-size:15px}
+
+/* lab */
+.lab{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px;margin:24px 0}
+.lab-title{font:700 18px/1.3 var(--display);margin:0 0 4px}
+.lab-sub{color:var(--muted);font-size:15px;margin:0 0 16px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,select,input,textarea{font:inherit;color:var(--ink)}
+.btn{font-size:15px;font-weight:500;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer;min-height:40px}
+.btn:hover{border-color:var(--cobalt)}
+.btn.primary{background:var(--cobalt);border-color:var(--cobalt);color:var(--on-cobalt)}
+.btn.on{background:var(--cobalt-soft);border-color:var(--cobalt)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.seg{display:inline-flex;flex-wrap:wrap;gap:4px;background:var(--paper);padding:4px;border-radius:12px}
+.seg .btn{border-color:transparent;background:transparent;min-height:36px;padding:6px 12px}
+.seg .btn.on{background:var(--surface);border-color:var(--line)}
+textarea,select,input[type=number]{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+textarea{width:100%;resize:vertical;font-size:16px}
+.field{display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--muted)}
+.grid-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:16px 0}
+input[type=range]{width:100%;accent-color:var(--cobalt)}
+.slider-row{display:grid;grid-template-columns:165px 1fr 90px;gap:12px;align-items:center;margin:10px 0;font-size:15px}
+.slider-row output{font-family:var(--mono);font-size:14px;text-align:right}
+@media (max-width:560px){.slider-row{grid-template-columns:1fr 80px}.slider-row input{grid-column:1/-1;grid-row:2}}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:16px}
+.stat{background:var(--paper);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--muted)}
+.stat b{display:block;font:700 24px/1.2 var(--display);color:var(--ink);margin-top:2px;font-variant-numeric:tabular-nums}
+.stat.hl{background:var(--cobalt-soft)}
+.chipbox{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;min-height:38px}
+
+.bars .row{display:grid;grid-template-columns:110px 1fr 56px;gap:10px;align-items:center;margin:6px 0;font-size:14px}
+.bars .lbl{font-family:var(--mono);font-size:13px;white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.bars .pct{text-align:right;font-variant-numeric:tabular-nums}
+.track{height:14px;background:var(--paper);border-radius:7px;overflow:hidden}
+.track i{display:block;height:100%;background:var(--cobalt);border-radius:7px;transition:width .25s ease}
+.bars .row.pick .lbl{font-weight:600}
+.bars .row.pick .track i{background:var(--good)}
+
+.pipeline{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px;padding:0;list-style:none;counter-reset:p}
+.pipeline li{counter-increment:p;font-size:14px;padding:6px 12px 6px 10px;border-radius:999px;background:var(--paper);color:var(--muted);transition:background .15s,color .15s}
+.pipeline li::before{content:counter(p);font:600 12px var(--mono);margin-right:7px}
+.pipeline li.live{background:var(--cobalt);color:var(--on-cobalt)}
+.textbox{background:var(--paper);border-radius:12px;padding:14px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;min-height:64px}
+.gen-split{display:grid;grid-template-columns:1fr;gap:18px;margin-top:16px}
+@media (min-width:720px){.gen-split{grid-template-columns:1.15fr 1fr}}
+.panel-label{font-size:14px;color:var(--muted);margin:0 0 6px}
+
+/* context bars */
+.stack{display:flex;height:34px;border-radius:9px;overflow:hidden;background:var(--paper);box-shadow:inset 0 0 0 1px var(--line);margin:8px 0 6px}
+.stack i{display:block;height:100%;transition:width .25s ease}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;color:var(--muted);margin:10px 0 0}
+.swatch{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px}
+.verdict.ok{color:var(--good);font-weight:600}.verdict.no{color:var(--bad);font-weight:600}
+
+/* small blocks */
+.cards3{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:18px 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card b{display:block;font:700 17px var(--display);margin-bottom:2px}
+.card p{margin:0;font-size:15px;color:var(--muted)}
+.card code{font-size:.8em}
+.vs{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin:18px 0}
+.vs .card.a{border-top:3px solid var(--s3)}.vs .card.b{border-top:3px solid var(--s2)}
+.vs ul{margin:6px 0 0;padding-left:18px;font-size:15px}
+.flow{list-style:none;padding:0;margin:20px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;counter-reset:f}
+.flow li{counter-increment:f;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:15px}
+.flow li::before{content:counter(f);display:block;font:600 13px var(--mono);color:var(--cobalt);margin-bottom:4px}
+.flow li.key{border-color:var(--good);background:var(--good-soft)}
+.flow li.bad{border-color:var(--bad);background:var(--bad-soft)}
+.flowlabel{font-size:14px;color:var(--muted);margin:18px 0 -8px}
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;font-size:14px;color:var(--muted);background:var(--paper);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td:first-child{white-space:nowrap}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.dots{letter-spacing:2px;color:var(--cobalt);white-space:nowrap}
+.try{border:1px dashed var(--cobalt);background:var(--cobalt-soft);border-radius:14px;padding:16px 20px;margin:22px 0}
+.try b{font:700 17px var(--display)}
+.try ol{margin:8px 0 10px;padding-left:20px}
+.try li{margin:3px 0}
+.refs{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin:32px 0 8px}
+.refs h4{font:700 17px var(--display);margin:0 0 6px}
+.refs ul{margin:0;padding-left:18px}
+.refs li{margin:6px 0;font-size:16px}
+.refs span{color:var(--muted)}
+
+/* chat mock */
+.chat{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+.msg{max-width:92%;padding:12px 14px;border-radius:14px;font-size:16px}
+.msg.user{align-self:flex-end;background:var(--cobalt);color:var(--on-cobalt);border-bottom-right-radius:4px}
+.msg.doc{align-self:stretch;max-width:100%;background:var(--paper);border:1px dashed var(--line);font-size:15px}
+.msg.doc b{font-size:13px;color:var(--muted);display:block;font-weight:600}
+.msg.bot{align-self:flex-start;background:var(--paper);border-bottom-left-radius:4px}
+.badge{display:inline-block;font-size:13px;font-weight:600;padding:3px 10px;border-radius:999px;margin-bottom:6px}
+.badge.bad{background:var(--bad-soft);color:var(--bad)}.badge.good{background:var(--good-soft);color:var(--good)}.badge.warn{background:var(--warn-soft);color:var(--warn)}
+.badge.easy{background:var(--good-soft);color:var(--good)}.badge.medium{background:var(--warn-soft);color:var(--warn)}.badge.tricky{background:var(--bad-soft);color:var(--bad)}
+
+/* timeline */
+.timeline{display:flex;height:14px;margin:34px 0 8px;border-radius:7px;overflow:hidden}
+.timeline .known{flex:7;background:var(--s1)}
+.timeline .gap{flex:3;background:repeating-linear-gradient(45deg,var(--line) 0 6px,transparent 6px 12px)}
+.tl-labels{display:flex;font-size:13px;color:var(--muted)}
+.tl-labels span:nth-child(1){flex:7}.tl-labels span:nth-child(2){flex:3;text-align:right}
+
+/* picker */
+.rec{margin-top:16px;padding:18px;border-radius:14px;background:var(--paper)}
+.rec .name{font:800 26px/1.1 var(--display);margin:0 0 6px}
+.rec .cl{margin:10px 0 0;font-size:15px;color:var(--muted)}
+
+/* quiz */
+.quiz-top{display:flex;justify-content:space-between;gap:10px;font-size:14px;color:var(--muted);margin-bottom:8px}
+.progress{height:8px;background:var(--paper);border-radius:4px;overflow:hidden;margin-bottom:18px}
+.progress i{display:block;height:100%;background:var(--cobalt);transition:width .25s}
+.qtext{font:700 21px/1.35 var(--display);margin:0 0 14px}
+.opts{display:grid;gap:8px}
+.opt{text-align:left;font-size:16px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;line-height:1.45}
+.opt:hover:not(:disabled){border-color:var(--cobalt)}
+.opt.right{background:var(--good-soft);border-color:var(--good)}
+.opt.wrong{background:var(--bad-soft);border-color:var(--bad)}
+.opt:disabled{cursor:default;color:var(--ink)}
+.opt:disabled:not(.right):not(.wrong){opacity:.6}
+.explain{margin-top:14px;padding:14px 16px;border-radius:12px;background:var(--paper);font-size:16px}
+.explain .res{font-weight:600;margin-right:6px}
+.big-score{font:800 52px/1 var(--display);margin:6px 0}
+.missed{margin:14px 0 0;padding:0;list-style:none;display:grid;gap:10px}
+.missed li{background:var(--paper);border-radius:10px;padding:12px 14px;font-size:15px}
+footer{color:var(--muted);font-size:14px;padding:40px 0 0}
+/* ---- topics 5 and 6 ---- */
+.k1{background:var(--t1)}.k2{background:var(--t2)}.k3{background:var(--t3)}.k4{background:var(--t4)}.k5{background:var(--t5)}
+.uc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:16px}
+.uc{background:var(--paper);border-radius:12px;padding:14px 16px}
+.uc h4{font:700 17px/1.3 var(--display);margin:0 0 4px}
+.uc p{margin:0 0 8px;font-size:15px}
+.pill-s{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--cobalt-soft);margin:0 4px 4px 0}
+.uc .meta{font-size:14px;color:var(--muted);margin:2px 0 0}
+.watch{border-left:3px solid var(--warn);background:var(--warn-soft);padding:10px 14px;border-radius:0 10px 10px 0;margin:16px 0 0;font-size:15px}
+.promptbox{background:var(--paper);border-radius:12px;padding:14px 16px;font-size:15.5px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}
+.promptbox span{border-radius:4px;padding:1px 3px}
+.check{display:flex;gap:10px;align-items:flex-start;padding:8px 0;font-size:16px;cursor:pointer}
+.check input{width:20px;height:20px;accent-color:var(--cobalt);margin-top:3px;flex:none}
+.check small{display:block;color:var(--muted);font-size:14px}
+.guess{margin:12px 0 0;padding-left:20px;font-size:15px}
+.guess li{margin:4px 0}
+.step{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0;background:var(--paper)}
+.step b{font:700 16px var(--display)}
+.step .pill-s{margin-left:8px;background:var(--surface)}
+.out{font-family:var(--mono);font-size:13.5px;line-height:1.55;white-space:pre-wrap;background:var(--surface);border-radius:8px;padding:10px 12px;margin-top:8px;overflow-x:auto;overflow-wrap:anywhere}
+.codebox{font-family:var(--mono);font-size:13.5px;line-height:1.6;white-space:pre-wrap;background:var(--paper);border-radius:12px;padding:14px;overflow-x:auto;overflow-wrap:anywhere}
+.codebox .v{background:var(--t5);border-radius:4px;padding:0 3px}
+.twocol{display:grid;grid-template-columns:1fr;gap:16px;margin-top:14px}
+@media (min-width:760px){.twocol{grid-template-columns:1fr 1fr}}
+.items{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px}
+.items .check{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--paper);font-size:15px;margin:0}
+.items .check small{display:inline;margin-left:4px;font-size:13px}
+.items .why{display:block;font-size:13.5px;margin-top:2px}
+.items .why.ok{color:var(--good)}.items .why.no{color:var(--bad)}
+.stats.sm{margin-top:12px}.stats.sm .stat b{font-size:20px}
+.recap{list-style:none;padding:0;margin:20px 0;display:grid;gap:10px;counter-reset:r}
+.recap li{counter-increment:r;display:grid;grid-template-columns:34px 1fr;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+.recap li::before{content:counter(r);font:600 14px var(--mono);color:var(--cobalt);padding-top:2px}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc" aria-label="Topics">
+  <div class="brand">LLM foundations</div>
+  <ol>
+    <li><a href="#t1"><span>1</span>Tokens, context and cost</a></li>
+    <li><a href="#t2"><span>2</span>Hallucinations</a></li>
+    <li><a href="#t3"><span>3</span>Choosing a model</a></li>
+    <li><a href="#t4"><span>4</span>What an LLM does</a></li>
+    <li><a href="#quiz"><span>?</span>Quiz 1</a></li>
+    <li><a href="#t5"><span>5</span>Real-world use cases</a></li>
+    <li><a href="#t6"><span>6</span>Prompt engineering</a></li>
+    <li><a href="#recap5"><span>✓</span>Recap</a></li>
+    <li><a href="#quiz2"><span>?</span>Quiz 2</a></li>
+    <li><button class="theme-toggle" id="themeBtn" aria-label="Switch between light and dark theme">◐ Theme</button></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero">
+  <h1>How large language models work</h1>
+  <p>Six ideas that explain what you see when you use an AI chatbot: what it costs, why it sometimes makes things up, which model to pick, what it is really doing, where it is used, and how to prompt it well. Each idea has something you can play with, and each half ends with a 20-question quiz.</p>
+  <div class="stream" aria-label="Animated example of a model writing one token at a time">
+    <div class="chips" id="heroChips"></div>
+    <div class="meta"><span id="heroCount">0 tokens</span><span>Every chip is one prediction</span></div>
+  </div>
+</header>
+
+<!-- ================= TOPIC 1 ================= -->
+<section class="topic" id="t1">
+  <div class="topic-head"><span class="num">1</span><h2>Tokens, context windows, sampling and cost</h2></div>
+  <p class="oneline">Models read and write small pieces of text called tokens. Tokens decide what you pay, how long you wait, and how much fits in one request.</p>
+
+  <h3>What is a token?</h3>
+  <p>A token is a chunk of text: a whole word, part of a word, a number or a punctuation mark. Common words like <code>cat</code> are one token. Longer or rarer words are split, so <code>unbelievable</code> becomes about three pieces. In English, one token is about 4 characters, so 100 tokens is roughly 75 words.</p>
+  <p class="analogy"><strong>Think of it like</strong> Lego. Common words are one big brick. Rare words, code and other languages are built from many small bricks, so the same idea takes more pieces.</p>
+
+  <div class="lab">
+    <p class="lab-title">See how text breaks into tokens</p>
+    <p class="lab-sub">Type anything, or try a sample. Each colour is one token. A faint dot marks a space.</p>
+    <div class="controls" id="tokSamples" style="margin-bottom:12px"></div>
+    <textarea id="tokInput" rows="3" aria-label="Text to split into tokens"></textarea>
+    <div class="chipbox" id="tokChips" aria-live="polite"></div>
+    <div class="stats">
+      <div class="stat">Characters<b id="tokC">0</b></div>
+      <div class="stat">Words<b id="tokW">0</b></div>
+      <div class="stat hl">Tokens<b id="tokN">0</b></div>
+      <div class="stat">Characters per token<b id="tokR">0</b></div>
+    </div>
+    <p class="muted" style="margin:14px 0 0">This is a simple teaching estimate. Each model family has its own tokenizer, so real counts differ a little. For exact numbers, use a real tokenizer (links at the end of this topic).</p>
+  </div>
+  <p>One side effect: the model sees <code>straw</code> + <code>berry</code>, not individual letters. That is why it can fumble questions like "how many r's are in strawberry?"</p>
+
+  <h3>Why token count matters</h3>
+  <div class="cards3">
+    <div class="card"><b>Cost</b><p>You are billed per token, for what you send and for what the model writes.</p></div>
+    <div class="card"><b>Speed</b><p>More tokens to read and write means a longer wait. The reply appears one token at a time.</p></div>
+    <div class="card"><b>Fit</b><p>Every model has a limit on tokens per request. Go past it and the request fails or text gets cut.</p></div>
+  </div>
+
+  <h3>Context window vs conversation length</h3>
+  <p>The context window is the most tokens a model can handle in one request. It holds everything together: your instructions, the chat so far, any documents, and the reply.</p>
+  <div class="stack" role="img" aria-label="A context window made of system prompt, chat history, documents and question, and the reply">
+    <i style="width:12%;background:var(--s1)"></i><i style="width:30%;background:var(--s2)"></i><i style="width:38%;background:var(--s3)"></i><i style="width:20%;background:var(--s4)"></i>
+  </div>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--s1)"></i>System prompt</span>
+    <span><i class="swatch" style="background:var(--s2)"></i>Chat history</span>
+    <span><i class="swatch" style="background:var(--s3)"></i>Documents and question</span>
+    <span><i class="swatch" style="background:var(--s4)"></i>Reply</span>
+  </div>
+  <p class="muted" style="margin-top:8px">The first three are input tokens. The reply is output tokens. All four share one limit.</p>
+  <p><b>Conversation length is different.</b> The model has no memory between requests. Each time you press send, the app sends the whole chat again. So a long chat means a bigger request every turn, and when it no longer fits, the oldest messages must be cut or summarised.</p>
+
+  <div class="lab">
+    <p class="lab-title">How a growing chat meets the window</p>
+    <p class="lab-sub">Move the slider to add messages and watch the next request grow.</p>
+    <div class="grid-fields" style="margin-top:0">
+      <label class="field">Model window<select id="chM"><option value="200000">Haiku 4.5: 200K tokens</option><option value="1000000">Sonnet 5.5 or Opus 5.5: 1M tokens</option></select></label>
+      <label class="field">Typical message<select id="chS"><option value="150">Short: about 150 tokens per message</option><option value="800" selected>Medium: about 800 tokens per message</option><option value="4000">Long (pasted documents): about 4,000 tokens per message</option></select></label>
+    </div>
+    <p class="muted" style="margin:-4px 0 6px">The 150, 800 and 4,000 figures are rough averages per message, counting both the messages you send and the replies the model writes.</p>
+    <div class="slider-row"><span>Messages in the chat</span><input type="range" id="chN" min="1" max="200" value="40" aria-label="Number of messages"><output id="chNv"></output></div>
+    <div class="stack" id="chBar"><i id="chFill" style="width:0;background:var(--s2)"></i></div>
+    <p id="chMsg" style="margin:6px 0 0"></p>
+    <div class="stats">
+      <div class="stat hl">Next request sends<b id="chA"></b></div>
+      <div class="stat">Billed over the whole chat<b id="chB"></b></div>
+      <div class="stat">If nothing were resent<b id="chC"></b></div>
+    </div>
+    <p class="muted" style="margin:12px 0 0">Assumes a 1K-token system prompt and 2K tokens reserved for the reply. A one-line question is only 10 to 30 tokens, while a reply is often a few hundred. 4,000 tokens is about 3,000 words, or 6 pages of text.</p>
+  </div>
+
+  <h3>When the window fills up</h3>
+  <ul>
+    <li>The model can't read past its limit. Depending on the tool, a too-big request is rejected with an error, the reply stops early, or the oldest messages are quietly dropped.</li>
+    <li>Chat apps usually handle this for you. They either drop the oldest messages first, or summarise them.</li>
+    <li>Compaction means the older part of the chat is replaced by a short summary, while recent messages are kept word for word. The chat then carries on in much less space.</li>
+    <li>The trade-off is that a summary keeps the main points but can lose small details from early on. Put must-keep instructions at the start of the prompt.</li>
+  </ul>
+
+  <h3>Temperature: how adventurous is the model?</h3>
+  <p>Sampling is how the model chooses its next token. It gives every option a probability, then picks one at random, like spinning a spinner whose slices are sized by those probabilities. "Sample 20 answers" means spinning it 20 times.</p>
+  <p>Temperature sets how adventurous that pick is. At a low setting it almost always takes the top choice, so answers are steady and repeatable. At a high setting, lower-ranked choices get a chance, so answers are varied and surprising.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Setting</th><th>Behaviour</th><th>Good for</th></tr>
+    <tr><td class="num">Low (0 to 0.3)</td><td>Focused, repeatable</td><td>Facts, data extraction, code</td></tr>
+    <tr><td class="num">Medium (0.5 to 0.8)</td><td>Balanced</td><td>Chat, emails, summaries</td></tr>
+    <tr><td class="num">High (0.9 and up)</td><td>Varied, surprising</td><td>Brainstorming, stories, slogans</td></tr>
+  </table></div>
+  <p class="muted">Temperature changes variety, not intelligence. A related setting, top-p, simply ignores the unlikely tail of choices.</p>
+
+  <div class="lab">
+    <p class="lab-title">Finish the sentence: "The best programming language is ___"</p>
+    <p class="lab-sub">Pick a setting, then sample 20 answers. Watch COBOL and "banana" sneak in as it heats up.</p>
+    <div class="seg" id="tempPresets" style="margin-bottom:10px"></div>
+    <div class="slider-row"><span>Temperature</span><input type="range" id="temp" min="0.1" max="2" step="0.05" value="1" aria-label="Temperature"><output id="tempV"></output></div>
+    <div class="bars" id="tempBars" style="margin-top:12px"></div>
+    <div class="controls" style="margin-top:14px"><button class="btn primary" id="sampleBtn">Sample 20 answers</button></div>
+    <div class="chipbox" id="sampleOut" aria-live="polite"></div>
+    <p class="muted" id="sampleSum" style="margin:8px 0 0"></p>
+  </div>
+
+  <div class="try">
+    <b>Try it for real in Google AI Studio</b>
+    <ol>
+      <li>Open <a href="https://aistudio.google.com/app/prompts/new_chat" target="_blank" rel="noopener">Google AI Studio</a> and sign in with a Google account.</li>
+      <li>In the chat, find the <b>Temperature</b> slider in the Run settings panel.</li>
+      <li>Ask "Suggest a name for a pet goldfish" three times at 0, then three times at 1.5 or higher.</li>
+    </ol>
+    <span class="muted">At 0 you will see nearly the same answer each time. At the top end, answers change and can get odd. The panel layout may change over time.</span>
+  </div>
+
+  <h3>Why longer prompts and answers cost more</h3>
+  <p>Every token has to be processed by the model, so more tokens means more computing, more time and more money. Output usually costs more per token than input, mainly because the model writes it one token at a time, with a full pass for each, while your input is read in one go.</p>
+  <p style="font-family:var(--mono);font-size:15px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;max-width:none">cost = input tokens × input rate + output tokens × output rate<br><span class="muted">(rates are quoted per 1 million tokens)</span></p>
+  <p>Two details catch people out. Cached input (a repeated prefix, such as a long system prompt) is billed at a fraction of the normal rate. And hidden "thinking" tokens are billed as output.</p>
+
+  <div class="lab">
+    <p class="lab-title">Estimate your monthly bill</p>
+    <p class="lab-sub">Start from a typical job, then change the numbers.</p>
+    <div class="seg" id="costPresets"></div>
+    <div class="grid-fields">
+      <label class="field">Model<select id="cModel"><option value="opus">Opus 5.5</option><option value="sonnet" selected>Sonnet 5.5</option><option value="haiku">Haiku 4.5</option></select></label>
+      <label class="field">Input tokens per request<input type="number" id="cIn" min="0" step="500"></label>
+      <label class="field">Output tokens per request<input type="number" id="cOut" min="0" step="100"></label>
+      <label class="field">Requests per day<input type="number" id="cReq" min="0" step="100"></label>
+    </div>
+    <div class="stats">
+      <div class="stat">Per request<b id="cr1"></b></div>
+      <div class="stat">Per day<b id="cr2"></b></div>
+      <div class="stat hl">Per month (30 days)<b id="cr3"></b></div>
+    </div>
+    <p class="panel-label" style="margin-top:20px">Same job on each model, per month</p>
+    <div class="bars" id="costCompare"></div>
+  </div>
+
+  <h3>Claude API prices (USD per 1 million tokens)</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Model</th><th>Input</th><th>Output</th><th>Cached input</th><th>Batch (in / out)</th><th>Context window</th></tr>
+    <tr><td>Opus 5.5</td><td class="num">$4</td><td class="num">$20</td><td class="num">$0.20</td><td class="num">$2 / $10</td><td class="num">1M</td></tr>
+    <tr><td>Sonnet 5.5</td><td class="num">$2</td><td class="num">$10</td><td class="num">$0.20</td><td class="num">$1 / $5</td><td class="num">1M</td></tr>
+    <tr><td>Haiku 4.5</td><td class="num">$1</td><td class="num">$5</td><td class="num">$0.10</td><td class="num">$0.50 / $2.50</td><td class="num">200K</td></tr>
+  </table></div>
+  <p class="muted">Checked against Anthropic's pricing page on 6 October 2026. Anthropic also has a premium tier, Claude Fable 5.1, at $10 input and $50 output for the most demanding work. Prices change, so always confirm on the official page.</p>
+
+  <div class="try" style="border-style:solid;background:var(--surface)">
+    <b>Official pricing pages</b>
+    <ul style="margin:8px 0 6px;padding-left:20px">
+      <li><a href="https://platform.claude.com/docs/en/about-claude/pricing" target="_blank" rel="noopener">Claude (Anthropic) API pricing</a></li>
+      <li><a href="https://openai.com/api/pricing/" target="_blank" rel="noopener">OpenAI (ChatGPT models) API pricing</a></li>
+      <li><a href="https://ai.google.dev/gemini-api/docs/pricing" target="_blank" rel="noopener">Google Gemini API pricing</a></li>
+    </ul>
+    <span class="muted">These are developer (API) prices. A ChatGPT, Claude or Gemini app subscription is a separate monthly plan and does not include API usage.</span>
+  </div>
+
+  <h3>Five ways to cut the bill</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Lever</th><th>What to do</th></tr>
+    <tr><td>Send less</td><td>Trim old chat turns and send only the relevant pages of a document</td></tr>
+    <tr><td>Cap the output</td><td>Ask for "3 bullet points" or set a maximum length</td></tr>
+    <tr><td>Cache repeats</td><td>Keep the long, unchanging part of the prompt at the start so it can be cached</td></tr>
+    <tr><td>Batch it</td><td>Use the Batch API for work that can wait, for 50% off</td></tr>
+    <tr><td>Right-size the model</td><td>Use a smaller model wherever quality holds up</td></tr>
+  </table></div>
+
+  <div class="remember"><strong>Remember</strong>Tokens drive cost, speed and fit. The model has no memory, so every turn resends the chat. Temperature controls variety, not intelligence.</div>
+
+  <div class="refs">
+    <h4>Practice and references</h4>
+    <ul>
+      <li><a href="https://platform.openai.com/tokenizer" target="_blank" rel="noopener">OpenAI tokenizer</a> <span>: paste text and see real tokens</span></li>
+      <li><a href="https://tiktokenizer.vercel.app" target="_blank" rel="noopener">Tiktokenizer</a> <span>: compare tokenizers side by side</span></li>
+      <li><a href="https://aistudio.google.com/app/prompts/new_chat" target="_blank" rel="noopener">Google AI Studio</a> <span>: play with the temperature slider</span></li>
+      <li><a href="https://platform.claude.com/docs/en/about-claude/pricing" target="_blank" rel="noopener">Claude pricing</a>, <a href="https://openai.com/api/pricing/" target="_blank" rel="noopener">OpenAI pricing</a>, <a href="https://ai.google.dev/gemini-api/docs/pricing" target="_blank" rel="noopener">Gemini pricing</a></li>
+    </ul>
+  </div>
+</section>
+<!-- ================= TOPIC 2 ================= -->
+<section class="topic" id="t2">
+  <div class="topic-head"><span class="num">2</span><h2>Hallucinations and knowledge limits</h2></div>
+  <p class="oneline">A model writes what sounds likely, not what has been checked. So it can be fluent and wrong at the same time.</p>
+
+  <h3>Why LLMs hallucinate</h3>
+  <p>A hallucination is an answer that sounds confident but is wrong or made up. It happens because the model is trained to produce a believable next token. It has no built-in fact-checker and no built-in "I'm not sure" alarm. When it lacks the facts, it still has to write something, and invented text reads just as smoothly as true text.</p>
+  <p class="analogy"><strong>Think of it like</strong> a bright student in an exam who skipped one chapter. Rather than leave the answer blank, they write something that sounds right. The handwriting is just as neat.</p>
+
+  <h3>Confidence is not correctness</h3>
+  <p>The tone of an answer tells you nothing about whether it is true. Try to spot which answers are wrong:</p>
+  <div class="lab">
+    <p class="lab-title" id="cgQ"></p>
+    <div class="chat"><div class="msg bot" id="cgA"></div></div>
+    <div class="controls" style="margin-top:14px" id="cgBtns">
+      <button class="btn" data-a="right">Looks right</button>
+      <button class="btn" data-a="wrong">Looks wrong</button>
+    </div>
+    <p id="cgRes" style="margin:14px 0 0" aria-live="polite"></p>
+    <div class="controls" style="margin-top:10px"><button class="btn primary" id="cgNext" hidden>Next</button></div>
+  </div>
+
+  <h3>Training data vs real-time information</h3>
+  <p>A model learns from text collected up to a cutoff date. After that it learns nothing new on its own. It also never saw your private files.</p>
+  <div class="timeline" aria-hidden="true"><div class="known"></div><div class="gap"></div></div>
+  <div class="tl-labels"><span>Everything it learned from, up to the cutoff</span><span>After the cutoff: unknown</span></div>
+  <div class="cards3">
+    <div class="card"><b>Real-time facts</b><p>"Who won last night's match?" or "What is the exchange rate right now?"</p></div>
+    <div class="card"><b>Private data</b><p>"Summarise our Q3 sales deck." It has never seen your files.</p></div>
+    <div class="card"><b>Exact calculation</b><p>It predicts digits rather than calculating, so long sums can be wrong.</p></div>
+  </div>
+
+  <h3>How grounding, RAG and tools help</h3>
+  <p>The fix is to bring the facts to the model instead of hoping it remembers them. RAG (retrieval-augmented generation) means: look up the relevant text first, then put it in the prompt with the question.</p>
+  <p class="flowlabel">Without grounding</p>
+  <ol class="flow">
+    <li>You ask a question</li>
+    <li>The model answers from memory only</li>
+    <li class="bad">A plausible answer, unchecked</li>
+  </ol>
+  <p class="flowlabel">With grounding (RAG)</p>
+  <ol class="flow">
+    <li>You ask a question</li>
+    <li class="key">Search your documents, database or the web</li>
+    <li>Prompt = question + the facts found</li>
+    <li>The model writes the answer</li>
+    <li class="key">Answer cites its sources</li>
+  </ol>
+  <p class="flowlabel">With a tool (search, calculator, database)</p>
+  <ol class="flow">
+    <li>The model decides it needs a tool</li>
+    <li class="key">The app runs the tool</li>
+    <li>The real result goes back into the prompt</li>
+    <li>The model writes the final answer</li>
+  </ol>
+
+  <div class="lab">
+    <p class="lab-title">Same question, three setups</p>
+    <p class="lab-sub">Switch between them and compare what comes back.</p>
+    <div class="seg" id="halModes"></div>
+    <div class="chat" id="halChat" aria-live="polite"></div>
+  </div>
+
+  <div class="tablewrap"><table>
+    <tr><th>Technique</th><th>How</th></tr>
+    <tr><td>Ground it</td><td>Put the relevant passages in the prompt and say "answer only from this text"</td></tr>
+    <tr><td>Give it tools</td><td>Search, calculator or database, so it reads real results instead of guessing</td></tr>
+    <tr><td>Allow "I don't know"</td><td>Say so in the prompt: "If the answer isn't in the text, say so"</td></tr>
+    <tr><td>Ask for sources</td><td>Require a quote for each claim, then spot-check the quotes</td></tr>
+    <tr><td>Verify</td><td>Human review or automatic checks for anything high-stakes</td></tr>
+  </table></div>
+
+  <div class="remember"><strong>Remember</strong>These techniques reduce hallucinations a lot, but never remove them completely. Check anything that matters.</div>
+
+  <div class="refs">
+    <h4>Practice and references</h4>
+    <ul>
+      <li><a href="https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations" target="_blank" rel="noopener">Anthropic guide: reduce hallucinations</a> <span>: practical prompt techniques</span></li>
+      <li><a href="https://aistudio.google.com/app/prompts/new_chat" target="_blank" rel="noopener">Google AI Studio</a> <span>: ask about something recent, then paste in a source and ask again</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= TOPIC 3 ================= -->
+<section class="topic" id="t3">
+  <div class="topic-head"><span class="num">3</span><h2>Model families and trade-offs</h2></div>
+  <p class="oneline">Pick the cheapest model that does the job well. Think in this order: task, then model, then cost and speed.</p>
+
+  <h3>Large vs small models</h3>
+  <p>Model makers offer a family of sizes. Larger models reason better, handle subtle language and keep long, multi-step work on track, but they are slower and cost more. Smaller models are fast and cheap, and are often plenty for narrow, repeated jobs. You cannot have top capability, top speed and the lowest cost all at once.</p>
+  <p class="analogy"><strong>Think of it like</strong> staffing a project. You do not ask your most senior architect to sort the inbox, and you do not hand a production outage to a new intern.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Size</th><th>Example</th><th>Capability</th><th>Speed</th><th>Low cost</th></tr>
+    <tr><td>Small</td><td>Haiku 4.5</td><td class="dots" aria-label="2 out of 4">●●○○</td><td class="dots" aria-label="4 out of 4">●●●●</td><td class="dots" aria-label="4 out of 4">●●●●</td></tr>
+    <tr><td>Mid</td><td>Sonnet 5.5</td><td class="dots" aria-label="3 out of 4">●●●○</td><td class="dots" aria-label="3 out of 4">●●●○</td><td class="dots" aria-label="3 out of 4">●●●○</td></tr>
+    <tr><td>Large</td><td>Opus 5.5</td><td class="dots" aria-label="4 out of 4">●●●●</td><td class="dots" aria-label="2 out of 4">●●○○</td><td class="dots" aria-label="2 out of 4">●●○○</td></tr>
+  </table></div>
+  <p class="muted">Dots show relative position within this family, not exact scores. Other providers (OpenAI, Google) sell the same kind of small, mid and large choices.</p>
+
+  <h3>Task to model to cost and speed</h3>
+  <ol class="flow">
+    <li><b>Task</b><br>Simple, high volume (tagging, routing)<br><br><b>Model</b><br>Small<br><br><b>Result</b><br>Lowest cost, fastest replies</li>
+    <li><b>Task</b><br>Everyday work (coding, chat, writing)<br><br><b>Model</b><br>Mid<br><br><b>Result</b><br>Good speed, fair price</li>
+    <li><b>Task</b><br>Hard or high stakes (contracts, long agents)<br><br><b>Model</b><br>Large<br><br><b>Result</b><br>Highest cost, slower, deepest reasoning</li>
+  </ol>
+
+  <div class="vs">
+    <div class="card a"><b>Choose the more capable model when</b>
+      <ul><li>Mistakes are costly</li><li>The task is subtle or has many steps</li><li>Volume is low, so extra cost is small</li></ul></div>
+    <div class="card b"><b>Choose the cheaper, faster model when</b>
+      <ul><li>The task is simple and repeated</li><li>Volume is high</li><li>People are waiting for an instant reply</li></ul></div>
+  </div>
+  <p>A practical way to decide: try the smaller model on 20 to 50 real examples. Move up a size only if it fails.</p>
+
+  <div class="lab">
+    <p class="lab-title">Pick a job, see the match</p>
+    <div class="controls" id="taskBtns"></div>
+    <div class="rec" id="rec" aria-live="polite"></div>
+  </div>
+
+  <div class="remember"><strong>Remember</strong>"Biggest" is not the same as "best". Match the model to the task, then check cost and speed.</div>
+
+  <div class="refs">
+    <h4>Practice and references</h4>
+    <ul>
+      <li><a href="https://platform.claude.com/docs/en/models/overview" target="_blank" rel="noopener">Claude models overview</a> <span>: the current family and what each is for</span></li>
+      <li><a href="https://openai.com/api/pricing/" target="_blank" rel="noopener">OpenAI pricing</a> and <a href="https://ai.google.dev/gemini-api/docs/pricing" target="_blank" rel="noopener">Gemini pricing</a> <span>: compare their small, mid and large options</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= TOPIC 4 ================= -->
+<section class="topic" id="t4">
+  <div class="topic-head"><span class="num">4</span><h2>What an LLM actually does</h2></div>
+  <p class="oneline">It repeats one move: predict the next token, add it to the text, and predict again.</p>
+  <p>There is no hidden answer database and no plan written in advance. When a model "answers a question", it is asking itself, over and over: given all the text so far, which token most likely comes next? A 200-word reply is about 270 of these predictions in a row.</p>
+  <p class="analogy"><strong>Think of it like</strong> your phone's keyboard suggestions, if the keyboard had read a huge slice of the internet and you kept tapping its top suggestion for a few hundred words.</p>
+
+  <ol class="flow">
+    <li>Prompt: your words</li>
+    <li>Tokens: the text split into chunks</li>
+    <li>Predict: score every possible next token</li>
+    <li>Pick one token (sampling)</li>
+    <li class="key">Add it to the text, then go back to step 3</li>
+  </ol>
+
+  <div class="lab">
+    <p class="lab-title">Watch the loop, one token at a time</p>
+    <p class="lab-sub">Press <b>Next token</b> to run one cycle, or <b>Play</b> to write the whole sentence.</p>
+    <ol class="pipeline" id="pipe">
+      <li>Read the text</li><li>Score every token</li><li>Pick one</li><li>Add it and repeat</li>
+    </ol>
+    <div class="controls">
+      <button class="btn primary" id="genNext">Next token</button>
+      <button class="btn" id="genPlay">Play</button>
+      <button class="btn" id="genReset">Start over</button>
+    </div>
+    <div class="gen-split">
+      <div>
+        <p class="panel-label">Grey is your prompt. Colour is the model's reply.</p>
+        <div class="textbox" id="genText"></div>
+        <p class="muted" id="genNote" style="margin:10px 0 0"></p>
+      </div>
+      <div>
+        <p class="panel-label" id="candLabel">The model's top guesses</p>
+        <div class="bars" id="genCands"></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Why such a simple mechanism can look so clever</h3>
+  <p>To get good at predicting the next token across trillions of words of text and code, the model has to pick up the patterns behind that text: grammar, facts, how arguments are built, how code works. Nobody wrote those skills in by hand. They come from getting the prediction right, at huge scale.</p>
+  <div class="cards3">
+    <div class="card"><b>"The capital of France is ___"</b><p>To predict well, it needs to know a fact.</p></div>
+    <div class="card"><b>"She dropped the glass, so it ___"</b><p>To predict well, it needs everyday common sense.</p></div>
+    <div class="card"><b>"If 3 pens cost 6, then 5 pens cost ___"</b><p>To predict well, it needs to follow a pattern of reasoning.</p></div>
+  </div>
+  <p>One more trick: every token it writes becomes input for the next one. So when a model writes out its steps, those steps give it working space for harder problems. That is why "think step by step" often helps.</p>
+
+  <h3>Why understanding this helps with prompting</h3>
+  <p>The model continues whatever you give it. A vague prompt has many likely continuations. A clear one has few, and one of them is what you want.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Vague prompt</th><th>Clearer prompt</th></tr>
+    <tr><td>Write about dogs.</td><td>Write 3 friendly sentences about dogs for a 7-year-old, one per line.</td></tr>
+    <tr><td>Help with my email.</td><td>Rewrite the email below to sound polite and keep it under 80 words. Email: ...</td></tr>
+    <tr><td>Is this true?</td><td>Using only the text below, is the claim true? If the text doesn't say, answer "not stated". Text: ...</td></tr>
+  </table></div>
+  <div class="cards3">
+    <div class="card"><b>Give context</b><p>Who is it for, and what is it about?</p></div>
+    <div class="card"><b>Show the format</b><p>Bullets, a table, one line, a number of words.</p></div>
+    <div class="card"><b>Add an example</b><p>One sample of what good looks like.</p></div>
+    <div class="card"><b>Supply the facts</b><p>It only knows its training data and your prompt.</p></div>
+  </div>
+
+  <div class="remember"><strong>Remember</strong>An LLM is a next-token predictor. Good prompts make the answer you want the most likely one.</div>
+
+  <div class="refs">
+    <h4>Practice and references</h4>
+    <ul>
+      <li><a href="https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview" target="_blank" rel="noopener">Anthropic prompt engineering overview</a> <span>: clear, practical prompting tips</span></li>
+      <li><a href="https://aistudio.google.com/app/prompts/new_chat" target="_blank" rel="noopener">Google AI Studio</a> <span>: rewrite a vague prompt into a clear one and compare</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= QUIZ ================= -->
+<section class="topic" id="quiz">
+  <div class="topic-head"><span class="num">?</span><h2>Quiz: topics 1 to 4</h2></div>
+  <p class="oneline">20 questions in a mix of easy, medium and tricky. Two students can take 10 each, or take turns.</p>
+  <div class="lab" id="quizBox" aria-live="polite"></div>
+</section>
+<!-- ================= TOPIC 5 ================= -->
+<section class="topic" id="t5">
+  <div class="topic-head"><span class="num">5</span><h2>Real-world GenAI use cases</h2></div>
+  <p class="oneline">Almost every real use of GenAI is a mix of six simple jobs, wrapped in the right checks. The industry changes, the jobs stay the same.</p>
+
+  <h3>Six jobs LLMs do well</h3>
+  <div class="cards3">
+    <div class="card"><b>Summarise</b><p>Long text in, short version out.</p></div>
+    <div class="card"><b>Extract</b><p>Pull names, dates and amounts out of messy text into a fixed layout.</p></div>
+    <div class="card"><b>Classify</b><p>Put an item in a category: billing, bug, urgent.</p></div>
+    <div class="card"><b>Draft</b><p>Write a first version for a person to edit: emails, notes, code.</p></div>
+    <div class="card"><b>Answer from documents</b><p>Find the right passages (RAG from Topic 2), then answer with sources.</p></div>
+    <div class="card"><b>Act with tools</b><p>Call search, a database or a calculator, then report the result.</p></div>
+  </div>
+
+  <div class="lab">
+    <p class="lab-title">Pick an industry</p>
+    <p class="lab-sub">Each card shows what the use case does, which jobs it uses, what it needs to be safe, and which model size usually fits (Topic 3).</p>
+    <div class="seg" id="indTabs"></div>
+    <div class="uc-grid" id="ucGrid" aria-live="polite"></div>
+    <div class="watch" id="ucWatch"></div>
+  </div>
+
+  <div class="remember"><strong>Remember</strong>Summarise, extract, classify, draft, answer from documents, act with tools. Add grounding, human review and the right model size, and you have most real-world GenAI.</div>
+
+  <div class="refs">
+    <h4>Practice and references</h4>
+    <ul>
+      <li><a href="https://www.anthropic.com/customers" target="_blank" rel="noopener">Anthropic customer stories</a> <span>: how companies in many industries use Claude</span></li>
+      <li><a href="https://platform.claude.com/docs/en/about-claude/use-case-guides" target="_blank" rel="noopener">Claude use case guides</a> <span>: ticket routing, support agents, content moderation, legal summaries</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= TOPIC 6 ================= -->
+<section class="topic" id="t6">
+  <div class="topic-head"><span class="num">6</span><h2>Prompt engineering</h2></div>
+  <p class="oneline">Prompt engineering is writing instructions so the answer you want becomes the most likely one. It follows straight from next-token prediction (Topic 4).</p>
+
+  <h3>Prompt anatomy: task, context, format and constraints</h3>
+  <p>A good prompt usually has four parts:</p>
+  <div class="cards3">
+    <div class="card" style="border-top:3px solid var(--s1)"><b>Task</b><p>What you want done. Start with a clear verb: write, classify, summarise.</p></div>
+    <div class="card" style="border-top:3px solid var(--s2)"><b>Context</b><p>What the model needs to know: who it is for, the background, the facts.</p></div>
+    <div class="card" style="border-top:3px solid var(--s4)"><b>Format</b><p>The shape of the answer: an email, a table, JSON, a number of words.</p></div>
+    <div class="card" style="border-top:3px solid var(--s3)"><b>Constraints</b><p>The rules: tone, length, what to avoid, "use only these facts".</p></div>
+  </div>
+  <p class="analogy"><strong>Think of it like</strong> briefing a new colleague. "Please do this (task). Here is the background (context). Send it to me like this (format). And watch out for these things (constraints)."</p>
+  <p>Optional extras are a role ("You are a support agent") and examples, which come next.</p>
+
+  <div class="lab">
+    <p class="lab-title">Build the prompt, see what the model has to guess</p>
+    <p class="lab-sub">The task is always there. Switch the other parts on and off.</p>
+    <label class="check"><input type="checkbox" id="anCtx" checked><span>Context<small>Shop, customer, cause of delay, refund policy</small></span></label>
+    <label class="check"><input type="checkbox" id="anFmt" checked><span>Format<small>Short email with a subject line</small></span></label>
+    <label class="check"><input type="checkbox" id="anCon" checked><span>Constraints<small>Tone, length, no extra promises</small></span></label>
+    <div class="promptbox" id="anBox" style="margin-top:12px" aria-live="polite"></div>
+    <div class="stats"><div class="stat hl">Left for the model to guess<b id="anCount"></b></div></div>
+    <ul class="guess" id="anGuess"></ul>
+  </div>
+
+  <h3>Zero-shot, one-shot and few-shot prompting</h3>
+  <p>"Shot" means example. The only difference is how many examples you put in the prompt.</p>
+  <div class="cards3">
+    <div class="card"><b>Zero-shot</b><p>Instructions only, no examples.</p></div>
+    <div class="card"><b>One-shot</b><p>Instructions plus one example.</p></div>
+    <div class="card"><b>Few-shot</b><p>Instructions plus a handful of examples.</p></div>
+  </div>
+
+  <div class="lab">
+    <p class="lab-title">Classify a customer message</p>
+    <p class="lab-sub">Choose how many examples to include.</p>
+    <div class="seg" id="shotSeg"></div>
+    <div class="promptbox" id="shotBox" style="margin-top:12px"></div>
+    <p id="shotNote" style="margin:12px 0 0"></p>
+  </div>
+  <div class="tablewrap"><table>
+    <tr><th>Use</th><th>When</th></tr>
+    <tr><td>Zero-shot</td><td>The task is clear and common, and any sensible format is fine</td></tr>
+    <tr><td>One-shot</td><td>You mainly need to show the output format or style</td></tr>
+    <tr><td>Few-shot</td><td>Categories are tricky or the format must be consistent</td></tr>
+  </table></div>
+  <h3>Prompt chaining</h3>
+  <p>Instead of one giant prompt, split a complex job into steps. Each step does one thing, and its output feeds the next step.</p>
+  <div class="cards3">
+    <div class="card"><b>Easier to debug</b><p>When something goes wrong, you can see which step failed.</p></div>
+    <div class="card"><b>Cheaper</b><p>Easy steps can use a small model (Topic 3).</p></div>
+    <div class="card"><b>Safer</b><p>You can add a check step before anything reaches a customer.</p></div>
+  </div>
+  <p>The cost is more calls, more waiting, and errors that can travel down the chain, so check the output between steps.</p>
+
+  <div class="lab">
+    <p class="lab-title">A chain that handles a complaint email</p>
+    <div class="out" id="chIn" style="margin:0 0 6px"></div>
+    <div class="controls"><button class="btn primary" id="chNext">Run next step</button><button class="btn" id="chReset">Start over</button></div>
+    <div id="chSteps" aria-live="polite"></div>
+    <p class="muted" id="chSum" style="margin:10px 0 0"></p>
+    <p class="muted" style="margin:6px 0 0">The outputs are examples written to show the flow, not real model output.</p>
+  </div>
+
+  <h3>Reusable templates</h3>
+  <p>If you send the same kind of prompt again and again, write it once as a template with blanks, then fill in the blanks each time. Store templates, give them version numbers, and test every change on a fixed set of sample inputs. Put the parts that never change at the start, so they can be cached (Topic 1).</p>
+  <div class="lab">
+    <p class="lab-title">Fill in the blanks</p>
+    <div class="grid-fields">
+      <label class="field">company<input type="text" id="tpCo" value="Stride Shoes" style="background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:8px 10px"></label>
+      <label class="field">customer_name<input type="text" id="tpName" value="Priya" style="background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:8px 10px"></label>
+      <label class="field">max_words<input type="number" id="tpMax" value="100" min="20" step="10"></label>
+    </div>
+    <label class="field">policy<textarea id="tpPol" rows="2">Refund the delivery fee if an order is more than 3 days late.</textarea></label>
+    <label class="field" style="margin-top:10px">message<textarea id="tpMsg" rows="2">My order #48213 has not arrived and I need it by Saturday.</textarea></label>
+    <div class="twocol">
+      <div><p class="panel-label">Template (written once)</p><div class="codebox" id="tpTemplate"></div></div>
+      <div><p class="panel-label">Prompt sent (filled in)</p><div class="codebox" id="tpOut" aria-live="polite"></div></div>
+    </div>
+  </div>
+
+  <h3>Prompt engineering vs context engineering</h3>
+  <div class="vs">
+    <div class="card a"><b>Prompt engineering</b>
+      <p class="muted" style="margin:0 0 6px">Example prompt:</p>
+      <p style="font-style:italic">"Summarize this document in 5 bullet points. Focus only on financial risks."</p>
+      <p style="margin-top:8px"><span style="font-weight:600">Think:</span> How do I ask the model?</p>
+    </div>
+    <div class="card b"><b>Context engineering</b>
+      <p>Context engineering focuses on what information or context you provide to the model so that it can make a good decision.</p>
+      <p style="margin-top:8px">For example, a banking chatbot might retrieve:</p>
+      <p style="margin:6px 0"><span class="pill-s">Customer profile</span> + <span class="pill-s">Transaction history</span> + <span class="pill-s">Bank policies</span> + <span class="pill-s">Previous conversations</span> + <span class="pill-s">Relevant FAQs</span></p>
+      <p>Then it sends this context along with the prompt.</p>
+      <p style="margin-top:8px"><span style="font-weight:600">Think:</span> What information should the model see before answering?</p>
+    </div>
+  </div>
+
+  <p><b>The simple difference</b></p>
+  <div class="tablewrap"><table>
+    <tr><th></th><th>Prompt engineering</th><th>Context engineering</th></tr>
+    <tr><td>In short</td><td>How to instruct the model</td><td>What information to provide</td></tr>
+    <tr><td>Focus</td><td>Instructions</td><td>Data and context</td></tr>
+    <tr><td>Made of</td><td>Prompt wording</td><td>Retrieval, memory, tools, documents</td></tr>
+    <tr><td>Example</td><td>"Summarize this"</td><td>Supplying the correct documents to summarize</td></tr>
+  </table></div>
+
+  <p><b>One example, both ways</b></p>
+  <div class="vs">
+    <div class="card a"><b>Prompt engineering</b><p>"Answer the customer's question professionally."</p></div>
+    <div class="card b"><b>Context engineering</b><p>Give the AI the customer's account details, transaction history, relevant bank policy and previous conversation.</p></div>
+  </div>
+  <p>Both go to the same model. The first only sets how to answer. The second decides what the model knows when it answers. Without the account details, it can only write a polite but generic reply, and it may guess the facts. That guessing is the hallucination problem from Topic 2. Retrieval, memory, tools and documents are how you supply the facts.</p>
+  <p>The five sources above are a pool, not a bundle to send every time. Pick only what is relevant to this question. More text costs more (Topic 1) and can distract the model.</p>
+
+  <div class="lab">
+    <p class="lab-title">Pack the window</p>
+    <p class="lab-sub">A customer asks: "Why was my card payment declined yesterday?" Tick what you would send with the question.</p>
+    <div class="items" id="cxItems"></div>
+    <div class="stats sm">
+      <div class="stat">Tokens in the window<b id="cxTok"></b></div>
+      <div class="stat">Useful items included<b id="cxUse"></b></div>
+      <div class="stat hl">Unneeded items included<b id="cxNoise"></b></div>
+    </div>
+    <div class="controls" style="margin-top:12px"><button class="btn primary" id="cxShow">Show the answers</button><button class="btn" id="cxReset">Clear</button></div>
+  </div>
+
+  <div class="remember"><strong>Remember</strong>A prompt has four parts: task, context, format, constraints. Examples and chains add reliability. Prompt engineering focuses mainly on how you write instructions to the model. Context engineering focuses on what information the model sees before it answers.</div>
+
+  <div class="refs">
+    <h4>Practice and references</h4>
+    <ul>
+      <li><a href="https://platform.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" target="_blank" rel="noopener">Claude prompting best practices</a> <span>: clarity, examples, structure</span></li>
+      <li><a href="https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/chain-prompts" target="_blank" rel="noopener">Chain complex prompts</a> <span>: when and how to split a task</span></li>
+      <li><a href="https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/use-xml-tags" target="_blank" rel="noopener">Use XML tags</a> <span>: keeping instructions, examples and data apart</span></li>
+      <li><a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" target="_blank" rel="noopener">Effective context engineering for AI agents</a> <span>: the Anthropic engineering post</span></li>
+      <li><a href="https://aistudio.google.com/app/prompts/new_chat" target="_blank" rel="noopener">Google AI Studio</a> <span>: try the same prompt with zero, one and three examples</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="topic" id="recap5">
+  <div class="topic-head"><span class="num">✓</span><h2>Topics 5 and 6 on one page</h2></div>
+  <ol class="recap">
+    <li><span><b>Six jobs:</b> summarise, extract, classify, draft, answer from documents, act with tools.</span></li>
+    <li><span><b>Industries:</b> banking, healthcare, retail and SaaS reuse the same jobs. Regulated fields add human review and strict data rules.</span></li>
+    <li><span><b>Prompt anatomy:</b> task, context, format, constraints.</span></li>
+    <li><span><b>Shots:</b> zero for simple tasks, one to show a format, few for tricky or consistent output. Use varied examples, not ones that all share a label.</span></li>
+    <li><span><b>Chaining:</b> split big jobs into steps, check between them, and use small models for easy steps.</span></li>
+    <li><span><b>Templates:</b> write once, fill the blanks, version and test them. Keep the fixed part first.</span></li>
+    <li><span><b>Prompt engineering vs context engineering:</b> the first is how you instruct the model, the second is what information it sees. Smaller and more relevant beats bigger.</span></li>
+  </ol>
+</section>
+
+<!-- ================= QUIZ 2 ================= -->
+<section class="topic" id="quiz2">
+  <div class="topic-head"><span class="num">?</span><h2>Quiz: topics 5 and 6</h2></div>
+  <p class="oneline">17 interview-style questions on use cases, prompting techniques and context engineering. Read every option carefully, because the answers are close.</p>
+  <div class="lab" id="quiz2Box" aria-live="polite"></div>
+  <footer>All numbers in the interactive models are illustrative and run in your browser. Prices checked against the official pages on 6 October 2026.</footer>
+</section>
+</main>
+</div>
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+const money=n=>n===0?'$0':n<0.01?'$'+n.toFixed(4):n<100?'$'+n.toFixed(2):'$'+Math.round(n).toLocaleString('en-US');
+const ktok=n=>n>=1e6?(n/1e6).toFixed(n%1e6?2:0)+'M':n>=1000?(n/1000).toFixed(n%1000?1:0)+'K':String(Math.round(n));
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+function chip(text,i,extra){
+  const m=text.match(/^(\s*)([\s\S]*)$/);
+  const lead=m[1].replace(/ /g,'·').replace(/\n/g,'↵');
+  return '<span class="tok c'+(i%5)+(extra?' '+extra:'')+'">'+(lead?'<span class="sp">'+lead+'</span>':'')+esc(m[2])+'</span>';
+}
+function seg(el,opts,cur,on){
+  el.innerHTML=opts.map(o=>'<button class="btn'+(o[0]===cur?' on':'')+'" data-v="'+o[0]+'" aria-pressed="'+(o[0]===cur)+'">'+o[1]+'</button>').join('');
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{setSeg(el,b.dataset.v);on(b.dataset.v)});
+}
+function setSeg(el,v){el.querySelectorAll('button').forEach(x=>{const o=x.dataset.v===v;x.classList.toggle('on',o);x.setAttribute('aria-pressed',o)})}
+
+/* theme */
+try{const t=localStorage.getItem('llmf-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}
+$('themeBtn').onclick=()=>{
+  const r=document.documentElement,dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme=dark?'light':'dark';try{localStorage.setItem('llmf-theme',r.dataset.theme)}catch(e){}
+};
+
+/* scroll spy */
+const links=[...document.querySelectorAll('.toc a')];
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){links.forEach(a=>{const on=a.getAttribute('href')==='#'+e.target.id;a.classList.toggle('active',on);if(on&&window.innerWidth<1000)a.scrollIntoView({block:'nearest',inline:'center'})})}})},{rootMargin:'-35% 0px -60% 0px'});
+document.querySelectorAll('section.topic').forEach(s=>io.observe(s));
+
+/* hero */
+const H=['Language',' models',' write',' one',' small',' piece',' at',' a',' time','.'];
+let hi=0;
+function hero(){
+  const c=$('heroChips');
+  if(reduce){c.innerHTML=H.map((t,i)=>chip(t,i)).join('');$('heroCount').textContent=H.length+' tokens';return}
+  if(hi>H.length)hi=0;
+  c.innerHTML=H.slice(0,hi).map((t,i)=>chip(t,i,i===hi-1?'new':'')).join('')+(hi<H.length?'<span class="caret"></span>':'');
+  $('heroCount').textContent=hi+(hi===1?' token':' tokens');
+  hi++;setTimeout(hero,hi>H.length?2400:420);
+}
+hero();
+
+/* ---------- tokenizer ---------- */
+const PRE=['un','re','dis','pre','inter','over','under','trans','micro'];
+const SUF=['ization','ation','tion','sion','ment','ness','able','ible','ing','ally','ful','less','ize','ise','ity','ous','ive','est','ed','er','ly','al'];
+const COMMON=new Set('the,and,that,this,with,from,have,your,there,their,would,about,which,sentence,friendly,summary,should,could,every,people,because,language,model,models,python,return,function,const,import,string,number,customer,please,thanks'.split(','));
+function splitWord(w){
+  const lw=w.toLowerCase();
+  if(w.length<=7||COMMON.has(lw))return[w];
+  let parts=[],s=w,start='',end='';
+  for(const p of PRE){if(lw.startsWith(p)&&w.length-p.length>=4){start=w.slice(0,p.length);s=w.slice(p.length);break}}
+  const ls=s.toLowerCase();
+  for(const x of SUF){if(ls.endsWith(x)&&s.length-x.length>=3){end=s.slice(s.length-x.length);s=s.slice(0,s.length-x.length);break}}
+  if(start)parts.push(start);
+  while(s.length>6){parts.push(s.slice(0,5));s=s.slice(5)}
+  if(s)parts.push(s);
+  if(end)parts.push(end);
+  return parts;
+}
+const gseg=(typeof Intl!=='undefined'&&Intl.Segmenter)?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
+function tokenize(text){
+  const re=/(\s*)([A-Za-z]+|\d+|[\p{L}\p{M}]+|[^\s\p{L}\p{M}\d])|(\s+)/gu;
+  const out=[];let m;
+  while((m=re.exec(text))){
+    if(m[3]){if(/\n/.test(m[3]))out.push('\n');continue}
+    const lead=m[1].replace(/\n/g,''),body=m[2];
+    if(m[1].includes('\n'))out.push('\n');
+    if(/^[A-Za-z]+$/.test(body)){splitWord(body).forEach((p,i)=>out.push((i===0?lead:'')+p))}
+    else if(/^\d+$/.test(body)){body.match(/\d{1,3}/g).forEach((p,i)=>out.push((i===0?lead:'')+p))}
+    else if(/[\p{L}\p{M}]/u.test(body)){const g=gseg?[...gseg.segment(body)].map(x=>x.segment):[...body];g.forEach((p,i)=>out.push((i===0?lead:'')+p))}
+    else out.push(lead+body);
+  }
+  return out;
+}
+const SAMPLES=[
+ ['Plain English','Write one friendly sentence about cats.'],
+ ['Long words','Internationalization requires understandable, maintainable documentation.'],
+ ['Code','def total(items):\n    return sum(i.price * i.qty for i in items)'],
+ ['Hindi','बिल्लियों के बारे में एक दोस्ताना वाक्य लिखिए।'],
+ ['Telugu','పిల్లుల గురించి ఒక స్నేహపూర్వక వాక్యం రాయండి.']
+];
+$('tokSamples').innerHTML=SAMPLES.map((s,i)=>'<button class="btn" data-i="'+i+'">'+s[0]+'</button>').join('');
+$('tokSamples').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('tokInput').value=SAMPLES[+b.dataset.i][1];runTok();$('tokSamples').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b))});
+function runTok(){
+  const t=$('tokInput').value,toks=tokenize(t);
+  $('tokChips').innerHTML=toks.slice(0,400).map((k,i)=>k==='\n'?'<span class="tok c'+(i%5)+'"><span class="sp">↵</span></span>':chip(k,i)).join('')+(toks.length>400?'<span class="muted">…and '+(toks.length-400)+' more</span>':'');
+  const w=t.trim()?t.trim().split(/\s+/).length:0;
+  $('tokC').textContent=fmt(t.length);$('tokW').textContent=fmt(w);$('tokN').textContent=fmt(toks.length);
+  $('tokR').textContent=toks.length?(t.length/toks.length).toFixed(1):'0';
+}
+$('tokInput').value=SAMPLES[0][1];$('tokInput').oninput=runTok;runTok();
+$('tokSamples').querySelector('button').classList.add('on');
+
+/* ---------- chat vs window ---------- */
+function runChat(){
+  const W=+$('chM').value,S=+$('chS').value,N=+$('chN').value;
+  $('chNv').textContent=N;
+  const SYS=1000,REPLY=2000,input=SYS+N*S,total=input+REPLY;
+  const billed=N*SYS+S*N*(N+1)/2,once=N*S;
+  const pct=Math.min(100,total/W*100);
+  $('chFill').style.width=pct+'%';$('chFill').style.background=total>W?'var(--bad)':'var(--s2)';
+  const over=total-W;
+  $('chMsg').innerHTML='<b>'+fmt(total)+'</b> of '+fmt(W)+' tokens needed ('+(total/W*100).toFixed(1)+'%). '+(over>0?'<span class="verdict no">Too big by '+fmt(over)+' tokens. About '+Math.ceil(over/S)+' of the oldest messages would have to be cut or summarised.</span>':'<span class="verdict ok">Fits.</span>');
+  $('chA').textContent=ktok(input);$('chB').textContent=ktok(billed);$('chC').textContent=ktok(once);
+}
+['chM','chS','chN'].forEach(id=>$(id).addEventListener('input',runChat));runChat();
+
+/* ---------- temperature ---------- */
+const K=[['Python',.38],['JavaScript',.24],['Rust',.14],['Go',.10],['Java',.08],['COBOL',.04],['banana',.02]];
+const LOG=K.map(k=>Math.log(k[1]));
+function probs(){
+  const T=+$('temp').value;
+  const z=LOG.map(l=>l/T),m=Math.max(...z),e=z.map(x=>Math.exp(x-m)),s=e.reduce((a,b)=>a+b,0);
+  return e.map(x=>x/s);
+}
+function runTemp(){
+  $('tempV').textContent=(+$('temp').value).toFixed(2);
+  const p=probs();
+  $('tempBars').innerHTML=K.map((k,i)=>'<div class="row"><span class="lbl">'+k[0]+'</span><div class="track"><i style="width:'+(p[i]*100)+'%"></i></div><span class="pct">'+(p[i]*100).toFixed(1)+'%</span></div>').join('');
+  const cur=['0.2','0.7','1.5'].find(v=>Math.abs(+v-+$('temp').value)<0.001);
+  setSeg($('tempPresets'),cur||'');
+}
+seg($('tempPresets'),[['0.2','Low (0.2)'],['0.7','Medium (0.7)'],['1.5','High (1.5)']],'',v=>{$('temp').value=v;runTemp();$('sampleOut').innerHTML='';$('sampleSum').textContent=''});
+$('temp').addEventListener('input',runTemp);runTemp();
+$('sampleBtn').onclick=()=>{
+  const p=probs(),o=[],tally={};
+  for(let n=0;n<20;n++){let r=Math.random(),c=0,k=0;for(;k<p.length-1;k++){c+=p[k];if(r<c)break}o.push(k);tally[K[k][0]]=(tally[K[k][0]]||0)+1}
+  $('sampleOut').innerHTML=o.map((k,i)=>'<span class="tok c'+(k%5)+(reduce?'':' new')+'" style="animation-delay:'+(i*25)+'ms">'+K[k][0]+'</span>').join('');
+  const kinds=Object.keys(tally).length;
+  $('sampleSum').textContent=Object.entries(tally).sort((a,b)=>b[1]-a[1]).map(e=>e[0]+' ×'+e[1]).join(', ')+'. '+(kinds===1?'The same answer every time: good for tasks that need consistency.':kinds>=5?kinds+' different answers: lots of variety, and some odd ones.':kinds+' different answers.');
+};
+
+/* ---------- cost ---------- */
+const PRICE={opus:{n:'Opus 5.5',i:4,o:20},sonnet:{n:'Sonnet 5.5',i:2,o:10},haiku:{n:'Haiku 4.5',i:1,o:5}};
+const CP=[['faq','FAQ chatbot',{m:'haiku',i:3000,o:300,r:5000}],['sum','Contract summaries',{m:'sonnet',i:40000,o:1500,r:200}],['agent','Coding agent',{m:'opus',i:80000,o:4000,r:300}]];
+function one(key,i,o){const P=PRICE[key];return(i*P.i+o*P.o)/1e6}
+function runCost(){
+  const i=Math.max(0,+$('cIn').value||0),o=Math.max(0,+$('cOut').value||0),r=Math.max(0,+$('cReq').value||0),key=$('cModel').value;
+  const t=one(key,i,o);
+  $('cr1').textContent=money(t);$('cr2').textContent=money(t*r);$('cr3').textContent=money(t*r*30);
+  const all=Object.keys(PRICE).map(k=>[k,one(k,i,o)*r*30]),mx=Math.max(...all.map(a=>a[1]))||1;
+  $('costCompare').innerHTML=all.map(a=>'<div class="row'+(a[0]===key?' pick':'')+'"><span class="lbl" style="font-family:var(--body)">'+PRICE[a[0]].n+'</span><div class="track"><i style="width:'+(a[1]/mx*100)+'%"></i></div><span class="pct" style="min-width:60px">'+money(a[1])+'</span></div>').join('');
+}
+function loadCost(k){const p=CP.find(c=>c[0]===k)[2];$('cModel').value=p.m;$('cIn').value=p.i;$('cOut').value=p.o;$('cReq').value=p.r;runCost()}
+seg($('costPresets'),CP.map(c=>[c[0],c[1]]),'faq',loadCost);
+['cModel','cIn','cOut','cReq'].forEach(id=>$(id).addEventListener('input',()=>{runCost();setSeg($('costPresets'),'')}));
+loadCost('faq');
+
+/* ---------- confidence game ---------- */
+const CG=[
+ {q:'What is the capital of Australia?',a:'The capital of Australia is Sydney. It is the largest city and is home to the Opera House and the national government.',ok:false,why:'Wrong. The capital is Canberra. The answer sounded just as sure as a correct one would.'},
+ {q:'Who won the Nobel Prize in Mathematics in 1987?',a:'The 1987 Nobel Prize in Mathematics was awarded to Dr. Henrik Larsson for his work on the distribution of prime numbers.',ok:false,why:'Wrong. There is no Nobel Prize in Mathematics, and the name is invented. A model can still produce a confident name.'},
+ {q:'How many legs does a spider have?',a:'A spider has eight legs.',ok:true,why:'Right. Correct and incorrect answers come in the same confident voice, so tone can never tell you which is which.'}
+];
+let cgI=0,cgScore=0;
+function cgShow(){
+  const r=CG[cgI];
+  $('cgQ').textContent='Round '+(cgI+1)+' of '+CG.length+': '+r.q;
+  $('cgA').textContent=r.a;$('cgRes').textContent='';$('cgNext').hidden=true;
+  $('cgBtns').querySelectorAll('button').forEach(b=>{b.disabled=false;b.className='btn'});
+}
+$('cgBtns').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+  const r=CG[cgI],guessRight=b.dataset.a==='right',won=guessRight===r.ok;
+  if(won)cgScore++;
+  $('cgBtns').querySelectorAll('button').forEach(x=>x.disabled=true);
+  b.classList.add('on');
+  $('cgRes').innerHTML='<b style="color:var(--'+(won?'good':'bad')+')">'+(won?'You spotted it.':'Not this time.')+'</b> '+esc(r.why);
+  $('cgNext').textContent=cgI<CG.length-1?'Next round':'See result';$('cgNext').hidden=false;
+});
+$('cgNext').onclick=()=>{
+  if(cgI<CG.length-1){cgI++;cgShow();return}
+  $('cgQ').textContent='You got '+cgScore+' of '+CG.length+' right.';
+  $('cgA').textContent='Sounding sure is easy for a model. Being right takes sources you can check.';
+  $('cgRes').textContent='';$('cgBtns').hidden=true;$('cgNext').textContent='Play again';
+  $('cgNext').onclick=resetCg;
+};
+function resetCg(){
+  cgI=0;cgScore=0;$('cgBtns').hidden=false;
+  $('cgNext').onclick=cgNextHandler;cgShow();
+}
+const cgNextHandler=$('cgNext').onclick;
+cgShow();
+
+/* ---------- hallucination demo ---------- */
+const DOC='<div class="msg doc"><b>Attached: refund-policy.txt</b>Unused items can be returned within 14 days for a refund. Sale items can be exchanged or given store credit only. Delivery charges are not refundable.</div>';
+const HM={
+ none:'<div class="msg user">What is our refund policy?</div><div class="msg bot"><span class="badge bad">Invented</span><br>You can return any item within 30 days of purchase for a full refund to your original payment method. Refunds are processed within 5 to 7 business days.</div><p class="muted" style="margin:0">It sounds official, but none of it came from your company. With no policy to read, the model wrote the most typical refund policy it knows. The real one says 14 days.</p>',
+ doc:DOC+'<div class="msg user">Answer only from the attached policy, and quote the line you used. What is our refund policy?</div><div class="msg bot"><span class="badge good">Grounded</span><br>Unused items can be returned within 14 days for a refund. Sale items are not refunded; they can be exchanged or given store credit. Delivery charges are not refunded.<br><span class="muted">Source: "Unused items can be returned within 14 days for a refund."</span></div><p class="muted" style="margin:0">Same model, same question. The only change is that the facts were in the prompt and it was told to stick to them.</p>',
+ gap:DOC+'<div class="msg user">Answer only from the attached policy. If it is not covered, say so. Do you refund customs duties on international orders?</div><div class="msg bot"><span class="badge warn">Honest "I don\'t know"</span><br>The policy does not mention customs duties or international orders. The closest rule is that delivery charges are not refundable. Please check with the support team before answering a customer.</div><p class="muted" style="margin:0">Without permission to say "I don\'t know", models tend to fill gaps. One sentence in the prompt changes that.</p>'
+};
+seg($('halModes'),[['none','No document'],['doc','Policy attached'],['gap','Question the policy doesn\'t cover']],'none',v=>{$('halChat').innerHTML=HM[v]});
+$('halChat').innerHTML=HM.none;
+
+/* ---------- model picker ---------- */
+const TASKS=[
+ ['Tag 100,000 support tickets','Small model (Haiku 4.5)','A simple, repeated job. Deep reasoning adds little, so cost and speed matter most.','Lowest cost, fastest replies. Add the Batch API for half price if it can wait.'],
+ ['Autocomplete as you type','Small model (Haiku 4.5)','The reply has to appear instantly, so speed is the whole point.','Lowest cost and the lowest delay.'],
+ ['Chatbot for your help pages','Small or mid model','Ground it in your own docs. Send hard questions up to a bigger model.','Small is cheapest; mid is a good default if answers need more care.'],
+ ['Everyday coding helper','Mid model (Sonnet 5.5)','Strong reasoning that is still quick enough to feel interactive.','Balanced: good speed, fair price.'],
+ ['Review a contract for risky clauses','Large model (Opus 5.5)','Subtle wording, high stakes and low volume. A missed clause costs far more than the tokens.','Highest cost and slower, but the volume is small so the bill stays low.'],
+ ['Long multi-step research agent','Large model (Opus 5.5)','Small errors pile up over many steps. A stronger planner often saves retries.','Highest cost per token, but fewer retries can make the total cheaper.']
+];
+$('taskBtns').innerHTML=TASKS.map((t,i)=>'<button class="btn" data-i="'+i+'">'+t[0]+'</button>').join('');
+const tb=[...$('taskBtns').querySelectorAll('button')];
+tb.forEach(b=>b.onclick=()=>{const t=TASKS[+b.dataset.i];tb.forEach(x=>x.classList.toggle('on',x===b));$('rec').innerHTML='<p class="name">'+t[1]+'</p><p style="margin:0">'+t[2]+'</p><p class="cl"><b>Cost and speed:</b> '+t[3]+'</p>'});
+tb[0].click();
+
+/* ---------- generation loop ---------- */
+const PROMPT=['Write',' one',' friendly',' sentence',' about',' cats','.'];
+const GEN=[
+ [' Cats',[[' Cats',.48],[' Every',.18],[' My',.14],[' A',.12]]],
+ [' are',[[' are',.55],[' make',.20],[' bring',.12],[' love',.08]]],
+ [' gentle',[[' wonderful',.34],[' gentle',.26],[' curious',.22],[' fluffy',.11]]],
+ [',',[[',',.44],[' and',.36],[' creatures',.10],[' pets',.07]]],
+ [' playful',[[' playful',.31],[' curious',.27],[' loving',.22],[' independent',.14]]],
+ [' friends',[[' friends',.38],[' companions',.35],[' animals',.15],[' pets',.08]]],
+ [' who',[[' who',.41],[' that',.32],[' and',.15],['.',.07]]],
+ [' make',[[' make',.36],[' bring',.35],[' fill',.15],[' turn',.08]]],
+ [' every',[[' every',.47],[' any',.21],[' a',.17],[' your',.11]]],
+ [' home',[[' home',.55],[' house',.22],[' day',.13],[' room',.07]]],
+ [' feel',[[' feel',.42],[' warmer',.20],[' cosy',.18],[' brighter',.12]]],
+ [' warm',[[' warm',.38],[' happy',.30],[' cosy',.20],[' lively',.08]]],
+ ['.',[['.',.83],['!',.09],[',',.04],[' and',.02]]],
+ ['[end]',[['[end]',.94],[' They',.03],['↵',.02],[' Cats',.005]]]
+];
+let gi=0,busy=false,playing=null;
+const pipeItems=[...$('pipe').children];
+function show(t){return t==='[end]'?'[stop]':t.replace(/^ /,'·')}
+function renderGen(pick){
+  const out=GEN.slice(0,gi).map(g=>g[0]).filter(t=>t!=='[end]');
+  $('genText').innerHTML=PROMPT.map(t=>chip(t,0,'prompt')).join('')+out.map((t,i)=>chip(t,i,i===out.length-1&&pick?'new':'')).join('')+(gi<GEN.length?'<span class="caret"></span>':'');
+  const done=gi>=GEN.length,g=done?GEN[GEN.length-1]:GEN[gi],sum=g[1].reduce((a,c)=>a+c[1],0),rest=Math.max(0,1-sum);
+  $('candLabel').textContent=done?'Last step: the model chose to stop':'Guesses for token #'+(gi+1);
+  $('genCands').innerHTML=g[1].map(c=>'<div class="row'+(pick&&c[0]===g[0]?' pick':'')+'"><span class="lbl">'+esc(show(c[0]))+'</span><div class="track"><i style="width:'+(c[1]*100)+'%"></i></div><span class="pct">'+Math.round(c[1]*100)+'%</span></div>').join('')
+    +'<div class="row"><span class="lbl" style="color:var(--muted)">thousands more</span><div class="track"><i style="width:'+(rest*100)+'%;background:var(--line)"></i></div><span class="pct">'+Math.round(rest*100)+'%</span></div>';
+  const n=out.length,last=gi>0?GEN[gi-1]:null;
+  let note;
+  if(done)note='Done. That took '+GEN.length+' passes through the model: one per token, plus one to decide to stop.';
+  else if(n===0)note='Nothing written yet. The model starts by reading your whole prompt.';
+  else{
+    const top=Math.max(...last[1].map(c=>c[1])),picked=last[1].find(c=>c[0]===last[0])[1];
+    note=n+' token'+(n>1?'s':'')+' written. '+(picked<top?'The last pick was not the top guess. That is sampling adding variety.':'The last pick was the top guess.');
+  }
+  $('genNote').textContent=note;
+  $('genNext').disabled=done;$('genPlay').disabled=done;
+}
+function step(){
+  if(busy||gi>=GEN.length)return Promise.resolve();
+  busy=true;const d=reduce?0:playing?110:200;
+  return new Promise(res=>{
+    let s=0;
+    const tick=()=>{
+      pipeItems.forEach((li,i)=>li.classList.toggle('live',i===s));
+      if(s===2){const g=GEN[gi];$('genCands').querySelectorAll('.row').forEach((r,i)=>{if(g[1][i]&&g[1][i][0]===g[0])r.classList.add('pick')})}
+      if(s===3){gi++;renderGen(true)}
+      s++;
+      if(s<4)setTimeout(tick,d);else setTimeout(()=>{pipeItems.forEach(li=>li.classList.remove('live'));busy=false;res()},d);
+    };tick();
+  });
+}
+function stopPlay(){if(playing){clearTimeout(playing);playing=null;$('genPlay').textContent='Play'}}
+$('genNext').onclick=()=>{stopPlay();step()};
+$('genPlay').onclick=()=>{
+  if(playing){stopPlay();return}
+  $('genPlay').textContent='Pause';
+  const loop=()=>{step().then(()=>{if(gi<GEN.length&&playing)playing=setTimeout(loop,reduce?300:150);else stopPlay()})};
+  playing=setTimeout(loop,0);
+};
+$('genReset').onclick=()=>{stopPlay();busy=false;gi=0;pipeItems.forEach(li=>li.classList.remove('live'));renderGen(false)};
+renderGen(false);
+
+/* ---------- quiz ---------- */
+const Q=[
+ ['E','What does an LLM do at its core?',['Predicts the next token, over and over','Looks up answers in a giant database','Searches the internet for every question','Plans a full answer first, then writes it down'],0,'It predicts one token at a time, adds it to the text, and repeats. There is no database lookup and no pre-written plan.'],
+ ['E','In AI, what is a token?',['A password that lets you use the model','A chunk of text such as a word, part of a word or punctuation','Exactly one letter of the alphabet','A point you earn for writing good prompts'],1,'Tokens are the chunks of text a model reads and writes. Billing and limits are counted in tokens.'],
+ ['M','You send the same prompt twice and get two different answers. What is the most likely reason?',['The model is broken','Sampling adds some randomness when temperature is above zero','The model forgot your first message','The internet changed in between'],1,'The model picks among likely tokens. Above zero temperature, that pick can differ from run to run.'],
+ ['E','About how many English words are 100 tokens?',['About 10','About 75','About 400','About 1,000'],1,'One token is about 4 characters, or three quarters of a word.'],
+ ['T','Why do models often stumble on "How many r\'s are in strawberry?"',['They cannot count at all','They see tokens, not individual letters','The word is too rare to appear in training data','Models are only built for numbers'],1,'The word arrives as chunks like "straw" and "berry", so the individual letters are hidden. A code tool counts reliably.'],
+ ['E','What is a context window?',['The most tokens a model can handle in one request','The browser window where you chat','The time the model takes to answer','The number of languages it speaks'],0,'It is the limit on tokens per request, covering input and reply together.'],
+ ['M','Why does a long chat get more expensive with every new message?',['The model charges extra for polite messages','The app resends the whole conversation as input each turn','Newer messages are priced higher','The model gets tired'],1,'The model has no memory. Every request carries the full history, so input grows each turn.'],
+ ['T','A chat history of 150,000 tokens plus a pasted report of 60,000 tokens goes to a model with a 200,000-token window. What happens?',['It fits, because the reply is not counted','It does not fit: the total already exceeds the window before any reply','The model quietly ignores the report','It fits if you lower the temperature'],1,'150K + 60K = 210K, which is over 200K even before the reply. Something has to be trimmed or summarised.'],
+ ['E','Which temperature setting is best for pulling exact figures out of invoices?',['Low, close to 0','High, close to 2','Temperature never matters for extraction','It must be exactly 1'],0,'Low temperature gives steady, repeatable answers, which is what extraction needs.'],
+ ['M','You raise the temperature from 0.2 to 1.5. What changes?',['The model becomes smarter','The model becomes more accurate','Its answers become more varied and less predictable','The context window gets bigger'],2,'Temperature changes variety, not intelligence or accuracy.'],
+ ['E','What is a hallucination?',['A fluent, confident answer that is wrong or made up','A picture the model draws','A very slow answer','An answer in the wrong language'],0,'Hallucinations sound confident because the model is built to write plausible text, not verified text.'],
+ ['T','A model gives a detailed, polite and very confident answer. What does that tell you about whether it is correct?',['Nothing: a confident tone is not evidence of accuracy','It is probably correct','It must have searched the internet','It is correct if it includes numbers'],0,'Right and wrong answers come in the same fluent voice. Check sources instead of tone.'],
+ ['M','You ask about your company\'s refund policy but give the model no document. What is the best fix?',['Ask it to try harder','Raise the temperature','Paste the policy in and tell it to answer only from that text','Ask five times and pick the most popular answer'],2,'Grounding gives it the real facts. "Answer only from this text" keeps it from inventing.'],
+ ['M','Which of these can a model NOT know without help from search or documents?',['What a verb is','Last night\'s match score','How to add 2 and 2','What a noun is'],1,'Anything after the training cutoff, or in your private files, is invisible to the model unless you supply it.'],
+ ['T','You add retrieval (RAG) and the model now cites your documents. Which statement is true?',['Hallucinations are now impossible','Hallucinations are reduced, but important answers still need checking','The model now has perfect memory of your files','The context window no longer matters'],1,'RAG reduces hallucinations but cannot remove them. The model can still misread or over-claim.'],
+ ['M','Which usually costs more per token?',['Input tokens','Output tokens','They cost exactly the same','Neither: you pay per request, not per token'],1,'Output is written one token at a time and is priced higher than input.'],
+ ['T','A model has a 1,000,000-token window. What does that mean for how you should prompt it?',['Always fill it, since the model uses everything equally well','It is an upper limit for input plus reply; sending only relevant text is cheaper and usually works better','It remembers 1,000,000 tokens from past chats','The reply can be a million tokens longer than the input'],1,'A big window is room, not a target. You pay for every token, and irrelevant text can distract the model.'],
+ ['M','Which job suits a small, fast model best?',['Reviewing a 200-page contract for hidden risks','Tagging 100,000 support tickets as billing, bug or other','Planning a multi-step research project','Writing the final legal opinion on a lawsuit'],1,'Simple, repeated, high-volume work is where small models give the best value.'],
+ ['T','A team always picks the biggest model "to be safe". What is the main problem?',['Bigger models cannot follow instructions','It may cost much more and respond more slowly when a smaller model would pass the same test','Bigger models have smaller context windows','Bigger models do not work with prompts'],1,'Capability costs money and time. Test the smaller model on real examples first and move up only if it fails.'],
+ ['T','Why does asking a model to "think step by step" often improve its answers?',['It switches on a hidden calculator','Each token it writes becomes input for the next, so the steps give it working space','It makes the model search the web','It lowers the price'],1,'The model builds on its own earlier tokens. Writing out steps gives it room to work through harder problems.']
+];
+const LV={E:['Easy','easy'],M:['Medium','medium'],T:['Tricky','tricky']};
+let qi=0,qScore=0,qAns=[],qOrder=[];
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function qStart(){qi=0;qScore=0;qAns=[];qOrder=Q.map(q=>shuffle(q[2].map((_,i)=>i)));qShow()}
+function qShow(){
+  const q=Q[qi],ord=qOrder[qi];
+  $('quizBox').innerHTML='<div class="quiz-top"><span>Question '+(qi+1)+' of '+Q.length+'</span><span>Score: '+qScore+'</span></div><div class="progress"><i style="width:'+(qi/Q.length*100)+'%"></i></div>'
+   +'<p class="qtext">'+esc(q[1])+'</p><div class="opts">'+ord.map(i=>'<button class="opt" data-i="'+i+'">'+esc(q[2][i])+'</button>').join('')+'</div><div id="qFb"></div>';
+  $('quizBox').querySelectorAll('.opt').forEach(b=>b.onclick=()=>qPick(+b.dataset.i));
+}
+function qPick(i){
+  const q=Q[qi],right=i===q[3];
+  if(right)qScore++;qAns.push({i,right});
+  $('quizBox').querySelectorAll('.opt').forEach(b=>{b.disabled=true;const v=+b.dataset.i;if(v===q[3])b.classList.add('right');else if(v===i)b.classList.add('wrong')});
+  $('qFb').innerHTML='<div class="explain"><span class="badge '+LV[q[0]][1]+'">'+LV[q[0]][0]+'</span><br><span class="res" style="color:var(--'+(right?'good':'bad')+')">'+(right?'Correct.':'Not quite.')+'</span>'+esc(q[4])+'</div><div class="controls" style="margin-top:14px"><button class="btn primary" id="qNext">'+(qi<Q.length-1?'Next question':'See my result')+'</button></div>';
+  $('qNext').focus();
+  $('qNext').onclick=()=>{qi++;qi<Q.length?qShow():qEnd()};
+}
+function qEnd(){
+  const by={E:[0,0],M:[0,0],T:[0,0]};
+  Q.forEach((q,k)=>{by[q[0]][1]++;if(qAns[k].right)by[q[0]][0]++});
+  const pct=qScore/Q.length,msg=pct>=.9?'Excellent work.':pct>=.7?'Well done. A few to review.':pct>=.5?'A good start. Re-read the topics you missed.':'Worth another read of the topics, then try again.';
+  const missed=Q.map((q,k)=>[q,k]).filter(x=>!qAns[x[1]].right);
+  $('quizBox').innerHTML='<div class="quiz-top"><span>Finished</span></div><div class="progress"><i style="width:100%"></i></div>'
+   +'<p class="muted" style="margin:0">Your score</p><div class="big-score">'+qScore+' / '+Q.length+'</div><p style="margin:0 0 12px">'+msg+'</p>'
+   +'<div class="stats"><div class="stat">Easy<b>'+by.E[0]+' / '+by.E[1]+'</b></div><div class="stat">Medium<b>'+by.M[0]+' / '+by.M[1]+'</b></div><div class="stat">Tricky<b>'+by.T[0]+' / '+by.T[1]+'</b></div></div>'
+   +(missed.length?'<h3 style="margin-top:24px">Questions to review</h3><ul class="missed">'+missed.map(x=>'<li><span class="badge '+LV[x[0][0]][1]+'">'+LV[x[0][0]][0]+'</span><br><b>'+esc(x[0][1])+'</b><br>Answer: '+esc(x[0][2][x[0][3]])+'<br><span class="muted">'+esc(x[0][4])+'</span></li>').join('')+'</ul>':'<p>Perfect score, nothing to review.</p>')
+   +'<div class="controls" style="margin-top:18px"><button class="btn primary" id="qAgain">Try again</button></div>';
+  $('qAgain').onclick=()=>{qStart();$('quiz').scrollIntoView({behavior:reduce?'auto':'smooth'})};
+}
+qStart();
+})();
+</script>
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function seg(el,opts,cur,on){
+  el.innerHTML=opts.map(o=>'<button class="btn'+(o[0]===cur?' on':'')+'" data-v="'+o[0]+'" aria-pressed="'+(o[0]===cur)+'">'+o[1]+'</button>').join('');
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{el.querySelectorAll('button').forEach(x=>{const o=x===b;x.classList.toggle('on',o);x.setAttribute('aria-pressed',o)});on(b.dataset.v)});
+}
+
+/* ---------- use cases ---------- */
+const UC={
+ banking:{label:'Banking',watch:'Banking is heavily regulated. Anything that affects a customer\'s money or credit needs human oversight, a record of what the model saw and said, and approved tools for handling customer data.',items:[
+  ['Customer support assistant','Answers questions about accounts, cards and fees from the bank\'s own help pages and policies, and hands anything sensitive to a person.',['Answer from documents'],'Approved content to ground on, a clear hand-off to staff','Small to mid'],
+  ['Document review for KYC and loans','Pulls names, dates and income figures out of statements and forms into a standard layout for a person to check.',['Extract'],'A human check and an audit trail','Small to mid, larger for messy scans'],
+  ['Alert and case summaries','Summarises why a fraud or compliance alert fired and gathers the evidence, so analysts decide faster.',['Summarise','Classify'],'A person makes the decision, every step logged','Mid'],
+  ['Legacy code help','Explains old systems (for example COBOL) and drafts modern replacements, with tests.',['Draft','Act with tools'],'Tests and code review','Mid to large']]},
+ health:{label:'Healthcare',watch:'Health data is sensitive and protected by law. The model supports clinicians and staff. It should never be the final word on a diagnosis or treatment.',items:[
+  ['Clinical note drafting','Turns a visit conversation or dictation into a draft note that the clinician edits and signs.',['Draft','Summarise'],'Clinician review and privacy controls','Mid'],
+  ['Record summaries','Condenses a long patient history into a one-page overview for handovers and referrals.',['Summarise'],'Links back to the source so facts can be checked, plus human review','Mid to large'],
+  ['Paperwork and coding','Drafts insurance letters and suggests billing codes from notes.',['Draft','Classify'],'Staff review before anything is sent','Small to mid'],
+  ['Patient questions','Drafts plain-language explanations and answers common questions, using approved material only.',['Answer from documents','Draft'],'Approved sources and an easy route to a human','Small to mid']]},
+ retail:{label:'Retail',watch:'A wrong price, stock level or refund promise becomes a real problem. Let the model read live data through tools instead of guessing.',items:[
+  ['Product descriptions at scale','Drafts consistent titles and descriptions from product details, in several languages.',['Draft'],'A style template and spot checks','Small'],
+  ['Shopping assistant','Understands requests like "a waterproof jacket for light hiking under 5,000 rupees" and answers from the live catalogue.',['Answer from documents','Act with tools'],'Live catalogue and stock access','Small to mid'],
+  ['Review summaries','Turns thousands of reviews into themes such as sizing, battery life or delivery.',['Summarise','Classify'],'Sample checks so themes are not invented','Small'],
+  ['Order help','Checks order status and starts returns by calling the order system.',['Act with tools','Answer from documents'],'The return policy as source text, and a hand-off to staff','Small to mid']]},
+ saas:{label:'SaaS',watch:'One customer\'s data must never show up for another. Watch the cost per user too, because AI features can run on every click.',items:[
+  ['In-product assistant','Answers "how do I…?" from the docs and can do the task inside the product, such as building a report.',['Answer from documents','Act with tools'],'Permissions that match the user\'s own access','Mid'],
+  ['Support triage','Tags and routes tickets, drafts replies and resolves common questions.',['Classify','Draft'],'Escalation rules and review of drafts','Small for tagging, mid for replies'],
+  ['Knowledge search','Answers questions across wikis, tickets and docs, with links to the sources.',['Answer from documents'],'Fresh indexing and access control','Small to mid'],
+  ['Coding help','Completes code, reviews changes and writes tests for the company\'s own engineers.',['Draft','Act with tools'],'Code review and a test suite','Mid to large']]}
+};
+function showInd(k){
+  const d=UC[k];
+  $('ucGrid').innerHTML=d.items.map(i=>'<div class="uc"><h4>'+esc(i[0])+'</h4><p>'+esc(i[1])+'</p><div>'+i[2].map(j=>'<span class="pill-s">'+esc(j)+'</span>').join('')+'</div><p class="meta"><b>Needs:</b> '+esc(i[3])+'</p><p class="meta"><b>Typical model:</b> '+esc(i[4])+'</p></div>').join('');
+  $('ucWatch').innerHTML='<b>Watch out:</b> '+esc(d.watch);
+}
+seg($('indTabs'),Object.keys(UC).map(k=>[k,UC[k].label]),'banking',showInd);showInd('banking');
+
+/* ---------- prompt anatomy ---------- */
+const AN={
+ task:'Write a reply to a customer whose order arrived 5 days late.',
+ ctx:'We are an online shoe shop. The customer, Priya, has bought from us before. The delay was caused by a courier strike. Our policy: refund the delivery fee when an order is more than 3 days late.',
+ fmt:'Write a short email with a subject line and three short paragraphs.',
+ con:'Keep the tone warm and professional. Stay under 120 words. Do not promise anything beyond the policy.'
+};
+const GUESS={
+ ctx:'Who you are, who the customer is, why it was late and what you can offer. It may invent a reason or an offer.',
+ fmt:'Length and layout. You could get a long essay, a bullet list or a single line.',
+ con:'Tone and promises. It might over-apologise, run long, or offer a full refund your policy does not allow.'
+};
+function runAn(){
+  const on={ctx:$('anCtx').checked,fmt:$('anFmt').checked,con:$('anCon').checked};
+  let h='<span class="k1">'+esc(AN.task)+'</span>';
+  if(on.ctx)h+='\n\n<span class="k2">'+esc(AN.ctx)+'</span>';
+  if(on.fmt)h+='\n\n<span class="k3">'+esc(AN.fmt)+'</span>';
+  if(on.con)h+='\n\n<span class="k4">'+esc(AN.con)+'</span>';
+  $('anBox').innerHTML=h;
+  const off=Object.keys(on).filter(k=>!on[k]);
+  $('anCount').textContent=off.length+' of 3';
+  $('anGuess').innerHTML=off.length?off.map(k=>'<li>'+esc(GUESS[k])+'</li>').join(''):'<li>Nothing important is left to chance.</li>';
+}
+['anCtx','anFmt','anCon'].forEach(id=>$(id).addEventListener('change',runAn));runAn();
+
+/* ---------- shots ---------- */
+const INSTR='Classify each customer message as Billing, Bug or Other. Reply with the label only.';
+const EXS=[['The app crashes when I tap Save.','Bug'],['I was charged twice this month.','Billing'],['Can I change my profile photo?','Other'],['The invoice page shows an error when I click Download.','Bug']];
+const NEWMSG='Why was I billed after I cancelled?';
+function shotHtml(n){
+  const ex=n===0?[]:n===1?[EXS[0]]:EXS;
+  let h='<span class="k1">'+esc(INSTR)+'</span>';
+  ex.forEach(e=>{h+='\n\n<span class="k5">Message: '+esc(e[0])+'\nLabel: '+esc(e[1])+'</span>'});
+  return h+'\n\nMessage: '+esc(NEWMSG)+'\nLabel:';
+}
+const SNOTE={
+ 0:'Works when the labels are obvious. With no example of the output style, the model may answer in a full sentence instead of just the label.',
+ 1:'The example shows the exact output format (label only). With a single example, the model may lean toward that example\'s label.',
+ 2:'Several varied examples, including a tricky one that mixes billing and bug, show the format and the edge. Outputs become more consistent.'
+};
+function runShot(v){v=+v;$('shotBox').innerHTML=shotHtml(v);$('shotNote').textContent=SNOTE[v]}
+seg($('shotSeg'),[['0','Zero-shot'],['1','One-shot'],['2','Few-shot']],'0',runShot);runShot(0);
+
+/* ---------- chain ---------- */
+const EMAIL='Customer email:\n"Hi, my order #48213 (running shoes) has not arrived and I need it for a race on Saturday. Please sort this out. Priya"';
+const CH=[
+ ['Extract the facts','Small model','{\n  "customer": "Priya",\n  "order": "48213",\n  "item": "running shoes",\n  "problem": "not delivered",\n  "deadline": "Saturday"\n}'],
+ ['Classify the message','Small model','{ "topic": "late delivery", "urgency": "high" }'],
+ ['Fetch the policy','Search tool, no model','Policy found: If an order is more than 3 days late, offer an express re-ship at no cost, or a full refund.'],
+ ['Draft the reply','Mid model','Hi Priya, I am sorry your running shoes have not arrived. Because you need them by Saturday, we will send a replacement by express delivery at no cost. If it cannot reach you in time, we will refund you in full. I will update you as soon as it ships.'],
+ ['Check the draft','Small model','Follows the policy: yes\nPromises beyond the policy: no\nTone: polite\nResult: pass, send to a person for a final look']
+];
+let ci=0;
+$('chIn').textContent=EMAIL;
+function runChain(){
+  $('chSteps').innerHTML=CH.slice(0,ci).map((s,i)=>'<div class="step"><b>Step '+(i+1)+': '+esc(s[0])+'</b><span class="pill-s">'+esc(s[1])+'</span><div class="out">'+esc(s[2])+'</div></div>').join('');
+  $('chNext').disabled=ci>=CH.length;
+  $('chNext').textContent=ci===0?'Run step 1':ci<CH.length?'Run step '+(ci+1):'Chain finished';
+  $('chSum').textContent=ci>=CH.length?'Five steps: four model calls (three small, one mid) and one search. Each step can be tested on its own, and the last one checks the draft before a person sees it.':'';
+}
+$('chNext').onclick=()=>{if(ci<CH.length){ci++;runChain()}};
+$('chReset').onclick=()=>{ci=0;runChain()};
+runChain();
+
+/* ---------- template ---------- */
+function runTpl(){
+  const v={company:$('tpCo').value,policy:$('tpPol').value,message:$('tpMsg').value,customer_name:$('tpName').value,max_words:$('tpMax').value};
+  const seq=[['You are a support agent for ',0],['company',1],['.\n\n<policy>\n',0],['policy',1],['\n</policy>\n\n<customer_message>\n',0],['message',1],['\n</customer_message>\n\nWrite a reply that:\n- greets ',0],['customer_name',1],[' by name\n- follows the policy above and promises nothing beyond it\n- is under ',0],['max_words',1],[' words',0]];
+  let tpl='',out='';
+  seq.forEach(s=>{
+    if(s[1]){tpl+='<span class="v">{{'+s[0]+'}}</span>';out+='<span class="v">'+esc(v[s[0]]||'…')+'</span>'}
+    else{tpl+=esc(s[0]);out+=esc(s[0])}
+  });
+  $('tpTemplate').innerHTML=tpl;$('tpOut').innerHTML=out;
+}
+['tpCo','tpName','tpMax','tpPol','tpMsg'].forEach(id=>$(id).addEventListener('input',runTpl));runTpl();
+
+/* ---------- pack the window ---------- */
+const CX=[
+ ['System prompt: tone and rules',800,true,'Always needed.'],
+ ['Yesterday\'s card transactions',200,true,'The key facts for this question.'],
+ ['Card-decline section of the bank policy',300,true,'Only the relevant part.'],
+ ['Last 3 messages of this chat',400,true,'Recent turns give the thread.'],
+ ['Full 40-page terms and conditions',12000,false,'Only one section is needed.'],
+ ['Chat history from the last 3 months',25000,false,'Old chats rarely help.'],
+ ['Five years of account statements',8000,false,'Not needed for one payment.'],
+ ['A marketing brochure',6000,false,'Irrelevant to this question.']
+];
+let cxReveal=false;
+function drawCx(){
+  const keep=[...$('cxItems').querySelectorAll('input')].map(x=>x.checked);
+  $('cxItems').innerHTML=CX.map((c,i)=>'<label class="check"><input type="checkbox" data-i="'+i+'"'+(keep[i]?' checked':'')+'><span>'+esc(c[0])+'<small>('+fmt(c[1])+' tokens)</small>'+(cxReveal?'<span class="why '+(c[2]?'ok':'no')+'">'+(c[2]?'Useful. ':'Leave out. ')+esc(c[3])+'</span>':'')+'</span></label>').join('');
+  $('cxItems').querySelectorAll('input').forEach(x=>x.addEventListener('change',statCx));
+  statCx();
+}
+function statCx(){
+  let tok=0,use=0,noise=0;
+  $('cxItems').querySelectorAll('input').forEach(x=>{if(x.checked){const c=CX[+x.dataset.i];tok+=c[1];c[2]?use++:noise++}});
+  $('cxTok').textContent=fmt(tok);
+  $('cxUse').textContent=use+' of '+CX.filter(c=>c[2]).length;
+  $('cxNoise').textContent=noise;
+}
+drawCx();
+$('cxShow').onclick=()=>{cxReveal=!cxReveal;$('cxShow').textContent=cxReveal?'Hide the answers':'Show the answers';drawCx()};
+$('cxReset').onclick=()=>{$('cxItems').querySelectorAll('input').forEach(x=>x.checked=false);statCx()};
+
+/* ---------- quiz factory ---------- */
+function makeQuiz(boxId,Q,scrollId){
+  const box=$(boxId);
+  const LV={E:['Easy','easy'],M:['Medium','medium'],T:['Tricky','tricky']};
+  const TP={U:'Use cases',P:'Prompting techniques',C:'Prompt vs context'};
+  let qi=0,score=0,ans=[],ord=[];
+  const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+  function start(){qi=0;score=0;ans=[];ord=Q.map(q=>shuffle(q[3].map((_,i)=>i)));show()}
+  function show(){
+    const q=Q[qi];
+    box.innerHTML='<div class="quiz-top"><span>Question '+(qi+1)+' of '+Q.length+'</span><span>Score: '+score+'</span></div><div class="progress"><i style="width:'+(qi/Q.length*100)+'%"></i></div>'
+     +'<p class="qtext">'+esc(q[2])+'</p><div class="opts">'+ord[qi].map(i=>'<button class="opt" data-i="'+i+'">'+esc(q[3][i])+'</button>').join('')+'</div><div class="fb"></div>';
+    box.querySelectorAll('.opt').forEach(b=>b.onclick=()=>pick(+b.dataset.i));
+  }
+  function pick(i){
+    const q=Q[qi],right=i===q[4];
+    if(right)score++;ans.push(right);
+    box.querySelectorAll('.opt').forEach(b=>{b.disabled=true;const v=+b.dataset.i;if(v===q[4])b.classList.add('right');else if(v===i)b.classList.add('wrong')});
+    box.querySelector('.fb').innerHTML='<div class="explain"><span class="badge '+LV[q[0]][1]+'">'+LV[q[0]][0]+'</span> <span class="badge good" style="background:var(--cobalt-soft);color:var(--ink)">'+TP[q[1]]+'</span><br><span class="res" style="color:var(--'+(right?'good':'bad')+')">'+(right?'Correct.':'Not quite.')+'</span>'+esc(q[5])+'</div><div class="controls" style="margin-top:14px"><button class="btn primary nextq">'+(qi<Q.length-1?'Next question':'See my result')+'</button></div>';
+    const nx=box.querySelector('.nextq');nx.focus();
+    nx.onclick=()=>{qi++;qi<Q.length?show():finish()};
+  }
+  function finish(){
+    const byL={E:[0,0],M:[0,0],T:[0,0]},byT={U:[0,0],P:[0,0],C:[0,0]};
+    Q.forEach((q,k)=>{byL[q[0]][1]++;byT[q[1]][1]++;if(ans[k]){byL[q[0]][0]++;byT[q[1]][0]++}});
+    const pct=score/Q.length,msg=pct>=.9?'Excellent work.':pct>=.7?'Well done. A few to review.':pct>=.5?'A good start. Re-read the topics you missed.':'Worth another read of the topics, then try again.';
+    const missed=Q.map((q,k)=>[q,k]).filter(x=>!ans[x[1]]);
+    box.innerHTML='<div class="quiz-top"><span>Finished</span></div><div class="progress"><i style="width:100%"></i></div>'
+     +'<p class="muted" style="margin:0">Your score</p><div class="big-score">'+score+' / '+Q.length+'</div><p style="margin:0 0 12px">'+msg+'</p>'
+     +'<div class="stats">'+Object.keys(LV).map(k=>'<div class="stat">'+LV[k][0]+'<b>'+byL[k][0]+' / '+byL[k][1]+'</b></div>').join('')+'</div>'
+     +'<div class="stats">'+Object.keys(TP).map(k=>'<div class="stat">'+TP[k]+'<b>'+byT[k][0]+' / '+byT[k][1]+'</b></div>').join('')+'</div>'
+     +(missed.length?'<h3 style="margin-top:24px">Questions to review</h3><ul class="missed">'+missed.map(x=>'<li><span class="badge '+LV[x[0][0]][1]+'">'+LV[x[0][0]][0]+'</span><br><b>'+esc(x[0][2])+'</b><br>Answer: '+esc(x[0][3][x[0][4]])+'<br><span class="muted">'+esc(x[0][5])+'</span></li>').join('')+'</ul>':'<p>Perfect score, nothing to review.</p>')
+     +'<div class="controls" style="margin-top:18px"><button class="btn primary again">Try again</button></div>';
+    box.querySelector('.again').onclick=()=>{start();$(scrollId).scrollIntoView({behavior:reduce?'auto':'smooth'})};
+  }
+  start();
+}
+/* [level, topic (U use cases, P prompting, C prompt vs context), question, options, index of correct option, explanation] */
+const Q2=[
+ ['E','U','An insurer wants software that reads incoming claim forms and copies the policy number, date and claim amount into a database. Which job is this?',['Extract','Summarise','Classify','Draft'],0,'Pulling specific fields out of messy text into a fixed layout is extraction. Summarising shortens, classifying sorts into categories, and drafting writes new text.'],
+ ['E','P','What makes a prompt few-shot?',['It includes several worked examples of the answer you want','It is kept short, with only a few instructions','It is sent to the model a few times in a row','It asks the model for a few alternative answers'],0,'"Shots" are examples. A few-shot prompt shows the model several finished examples before the real input.'],
+ ['E','C','Which pairing matches each idea to the question it answers?',['Prompt engineering: how do I ask? Context engineering: what should the model see?','Prompt engineering: what should the model see? Context engineering: how do I ask?','Prompt engineering: which model do I pick? Context engineering: how long is the answer?','Prompt engineering: how much does it cost? Context engineering: how fast is it?'],0,'Prompt engineering is about how you instruct the model. Context engineering is about which information it gets to see before it answers.'],
+ ['M','P','Which line from a prompt is a constraint?',['Keep it under 100 words and avoid technical terms.','Write a summary of the attached report.','The report covers sales across three regions.','Present the result as a table with three rows.'],0,'Constraints are rules and limits such as length, tone and things to avoid. The second line is the task, the third is context and the fourth is format.'],
+ ['M','C','A support bot gives polite but vague answers about a customer\'s refund, even though its instructions have been reworded several times. What is most likely missing?',['The refund details and the relevant policy in the model\'s context','A longer list of formatting rules in the instruction','More politeness rules in the system prompt','A higher temperature to make the answers friendlier'],0,'If the wording is already good, the likely gap is information. Without the refund details and the policy, the model can only be polite and generic, or guess.'],
+ ['T','P','Which statement about zero-shot prompting is correct?',['It gives instructions but no examples','It gives no instructions at all, only the input','It always produces worse results than few-shot','It only works with small models'],0,'Zero-shot means zero examples, not zero instructions. For clear, common tasks it is often enough, so it is not automatically worse.'],
+ ['M','U','A shopping assistant answers "a waterproof jacket under $50" by checking live stock and prices. Which jobs is it combining?',['Answer from documents and act with tools','Summarise and classify','Draft and extract','Classify only'],0,'It reads the catalogue (answering from documents) and calls live stock or price data through a tool, rather than guessing from memory.'],
+ ['M','P','You ask a model for a short note to a client about a delay, and it writes a generic apology. Which part of the prompt is most likely missing?',['Context','Format','Constraints','A role line'],0,'Which client, what delay, why it happened and what comes next are all context. Without them the model fills the gaps with a generic message.'],
+ ['E','U','A bank is choosing its first GenAI pilot. Which is the sensible start?',['Drafting replies to routine customer emails, checked by an agent before they are sent','Approving or declining loan applications automatically, with no human review','Writing final regulatory filings without anyone checking them','Setting customer credit limits directly from chat transcripts'],0,'A good first project is repetitive, easy to check and keeps a person in the loop. Decisions that directly affect customers should not start unsupervised.'],
+ ['T','C','A team adds every policy, every old chat and the full customer history to each request "to be safe". Costs rise and answers get worse. Which principle did they miss?',['Give the model the smallest set of relevant information that supports a good decision','Always add more context, because models handle all of it equally well','Put the instructions at the end of the request instead of the start','Replace retrieval with one longer system prompt that covers everything'],0,'More text costs more and can distract the model. Good context engineering is selective: only what this question needs.'],
+ ['M','P','A model tags customer feedback inconsistently, sometimes "Positive" and sometimes "Good". What is the best fix?',['Add a few examples that show the exact allowed labels','Raise the temperature so it explores more label choices','Make the task description longer and more polite','Move to a larger model before touching the prompt'],0,'Examples show the exact output format. A higher temperature adds variety, which is the opposite of what you need, and politeness does not fix labels.'],
+ ['E','C','Which of these is context engineering rather than prompt engineering?',['Supplying the customer\'s recent transactions along with the question','Asking the model to answer in a formal tone','Limiting the answer to three sentences','Telling the model to use bullet points'],0,'Tone, length and bullets are instructions. Supplying the data the model needs to answer is context.'],
+ ['T','P','You give three examples, all labelled "Urgent", then ask the model to label a new message. What is the main risk?',['The model may lean toward the label every example shares','The model may ignore the examples because there are so few','The model may repeat the examples instead of answering','The model may switch to a different task entirely'],0,'Examples set a pattern. If they all share one label, that label looks like the expected answer. Use varied examples that cover the tricky cases.'],
+ ['T','P','In a three-step chain, step 2 misreads a date and the final answer is wrong. What should you add?',['A check between steps so errors are caught before they travel on','A longer final prompt asking the model to be extra careful','A higher temperature in step 3 so it can correct itself','More examples in step 1 only, leaving the rest unchanged'],0,'Errors in a chain pass downstream. Validating each step\'s output, by code or by another step, catches them early.'],
+ ['T','C','A long agent session has used most of its context window. Which action is context engineering?',['Summarising earlier steps and keeping only what the next step needs','Rewording the instruction to sound more polite','Lowering the temperature to make answers steadier','Asking the model to answer in fewer words'],0,'Compaction decides what stays in the window. The other options change tone, variety or answer length, not what information the model sees.'],
+ ['M','P','A team rewrites the same support prompt by hand for every product. What is the better practice?',['Keep one versioned template with blanks and test it on sample inputs','Save each rewritten prompt in a separate chat and compare later','Let every agent improvise the prompt from scratch each time','Use the longest version of the prompt for every product'],0,'A template gives consistency and makes changes testable, and the fixed part can be cached.'],
+ ['T','C','A colleague says: "Context engineering is just prompt engineering with a longer prompt." What is the most accurate reply?',['They overlap, but context engineering also covers retrieval, memory, tools and documents','That is right, since both only concern the words of the instruction','That is wrong, because context engineering never involves prompts','That is wrong, because context engineering is only about model size'],0,'Wording matters in both, but context engineering is wider. It decides which information reaches the model, through retrieval, memory, tools and documents.']
+];
+makeQuiz('quiz2Box',Q2,'quiz2');
+})();
+</script>
+</body>
+</html>
